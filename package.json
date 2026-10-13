@@ -2,7 +2,7 @@
   "name": "water-king",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.11.0",
+  "packageManager": "pnpm@11.25.0",
   "engines": { "node": ">=22" },
   "scripts": {
     "dev:mini": "pnpm --filter @water-king/miniapp dev",

@@ -23,11 +23,11 @@
 
 ## 本地开发
 
-要求 Node.js 24、pnpm 10.11.0、微信开发者工具；数据库开发另需 Docker。
+要求 Node.js 24、pnpm 11.25.0、微信开发者工具；数据库开发另需 Docker。
 
 ```sh
 corepack enable
-corepack prepare pnpm@10.11.0 --activate
+corepack prepare pnpm@11.25.0 --activate
 pnpm install --frozen-lockfile
 pnpm test
 pnpm typecheck
@@ -51,3 +51,7 @@ Compose 会在新数据库卷首次启动时执行初始化 SQL；已有数据�
 小程序通过微信开发者工具上传和审核；API 使用容器部署在中国大陆可访问的服务环境，数据库采用托管 PostgreSQL。上线前需要 HTTPS 域名、小程序合法请求域名、真实 AppID、服务端密钥、隐私说明及认证/权限检查。具体域名与备案条件按届时实际部署环境确认。
 
 代码仓库保持 Private，不添加开源许可证。任何密钥和真实用户记录都不能提交到 Git。
+
+## 初始化验证
+
+已通过共享统计逻辑的 3 项测试、全部工作区 TypeScript 检查、小程序生产构建、API 编译与 `/health` 启动检查。尚未在微信开发者工具或真机验证；数据库迁移尚未在 PostgreSQL 实例执行。
