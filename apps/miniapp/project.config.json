@@ -1,0 +1,4 @@
+{
+  "appid": "touristappid", "projectname": "water-king", "miniprogramRoot": "dist/",
+  "compileType": "miniprogram", "setting": { "es6": true, "minified": true }
+}

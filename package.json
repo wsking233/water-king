@@ -1,0 +1,14 @@
+{
+  "name": "water-king",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.11.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev:mini": "pnpm --filter @water-king/miniapp dev",
+    "dev:api": "pnpm --filter @water-king/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "node --test packages/domain/test/*.test.mjs"
+  }
+}
