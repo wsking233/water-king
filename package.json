@@ -6,7 +6,7 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "dev:mini": "pnpm --filter @water-king/miniapp dev",
-    "dev:api": "pnpm --filter @water-king/api dev",
+    "dev": "pnpm dev:mini",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "node --test packages/domain/test/*.test.mjs"
