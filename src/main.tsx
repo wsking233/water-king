@@ -22,7 +22,6 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import {
-  KEY,
   STORE_KEY,
   readStore,
   newCup,
@@ -40,6 +39,7 @@ import {
   type Entry,
   type Kind,
 } from "./records";
+import { recordRepository } from "./repository";
 import "./style.css";
 import { useOfflineApp, prepareRefresh } from "./offline";
 import { EntryEditor } from "./EntryEditor";
@@ -141,10 +141,7 @@ function App() {
   }
   const [initial] = useState(() => {
     try {
-      const state = readStore(
-        localStorage.getItem(STORE_KEY),
-        localStorage.getItem(KEY),
-      );
+      const state = recordRepository.load();
       return { ...state, error: "" };
     } catch {
       return {
@@ -212,10 +209,7 @@ function App() {
     const sync = (e: StorageEvent) => {
       if (e.key !== STORE_KEY && e.key !== null) return;
       try {
-        const state = readStore(
-          localStorage.getItem(STORE_KEY),
-          localStorage.getItem(KEY),
-        );
+        const state = recordRepository.load();
         setEntries(state.entries);
         setCup(state.cup);
         setNotice(null);
@@ -252,10 +246,7 @@ function App() {
     nextGoal: number | null = goal,
   ) {
     try {
-      localStorage.setItem(
-        STORE_KEY,
-        JSON.stringify({ entries: next, cup: nextCup, goal: nextGoal }),
-      );
+      recordRepository.save({ entries: next, cup: nextCup, goal: nextGoal });
       setLastDrink(null);
       setRefillUndo(null);
       setCup(nextCup);

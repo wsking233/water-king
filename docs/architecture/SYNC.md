@@ -49,6 +49,8 @@ React 页面
 ## 阶段任务和验收
 
 ### WK-01 数据层重构
+
+开发进度：已拆分 `RecordRepository` / `SettingsRepository` 和本地实现，页面读写统一经过 Repository；保留原存储键与 JSON 格式。27 项自动测试及 Pages 路径构建通过；离线、触摸与 iPhone 回归留待人工，尚不宣称全部验收完成。
 分离页面与持久化逻辑，定义 RecordRepository/SettingsRepository 接口；兼容旧 `water-king.state.v2` 和 v1 记录及 v1 JSON 备份。先保持页面行为不变；增加迁移及失败回滚测试。**完成标准**：原有喝水、嘘嘘、编辑、删除、撤销、跨日水位、离线和备份全回归通过。
 
 ### WK-02 Supabase 身份与数据库
