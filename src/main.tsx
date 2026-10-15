@@ -14,6 +14,7 @@ import {
   GlassWater,
   UserRound,
   ShieldCheck,
+  RefreshCw,
   Minus,
   ArrowUpRight,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import {
   type Kind,
 } from "./records";
 import "./style.css";
+import { appBuild } from "./build";
 const labels = { water: "喝水", small: "嘘嘘" };
 type Tab = "today" | "history" | "rank" | "me";
 type Sheet = Kind | "clear" | Entry | RecordGroup | null;
@@ -98,6 +100,17 @@ function BottomSheet({
   );
 }
 function App() {
+  const [refreshing, setRefreshing] = useState(false);
+  function refreshApp() {
+    if (!navigator.onLine) {
+      setError("当前处于离线状态，请联网后再刷新应用。记录仍保存在本机。");
+      return;
+    }
+    setRefreshing(true);
+    const url = new URL(window.location.href);
+    url.searchParams.set("_refresh", String(Date.now()));
+    window.location.replace(url.toString());
+  }
   const [initial] = useState(() => {
     try {
       const state = readStore(
@@ -589,6 +602,18 @@ function App() {
                   <small>无需登录，不上传个人记录</small>
                 </span>
               </div>
+              <button
+                className="refresh-app"
+                onClick={refreshApp}
+                disabled={refreshing}
+              >
+                <RefreshCw className={refreshing ? "refresh-spinning" : ""} />
+                <span>
+                  <strong>{refreshing ? "正在刷新…" : "刷新应用"}</strong>
+                  <small>重新加载页面，保留本机记录</small>
+                </span>
+                <ChevronRight size={18} />
+              </button>
               <button onClick={() => open("clear")}>
                 <Trash2 />
                 <span>清空所有记录</span>
@@ -603,7 +628,7 @@ function App() {
             <div className="app-signature">
               <Waves size={22} />
               <span>大水之王 · 用心记录日常</span>
-              <small>单机原型 0.2</small>
+              <small>当前版本 · {appBuild}</small>
             </div>
           </>
         )}

@@ -1642,3 +1642,18 @@ body {
     padding-bottom: 7px;
   }
 }
+
+.settings .refresh-app {
+  color: #53646d;
+}
+.refresh-app > svg:first-child {
+  color: #80a8bc;
+}
+.refresh-spinning {
+  animation: refresh-spin 1s linear infinite;
+}
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
