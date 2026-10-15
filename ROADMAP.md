@@ -63,7 +63,7 @@
 
 ## 阶段 3：联网基础与用户系统（当前开发优先级，V0.2）
 
-当前先实现用户系统与私人数据云同步，再考虑成就及排行榜。使用 Supabase（托管 PostgreSQL、Auth、RLS），不自建 Express 服务。项目已配置，profiles 模型已部署并验证双身份 RLS；账号基础代码及本地数据访问层已实现，真实 Auth 链路、记录同步、绑定及 30 天清理仍待完成。详细架构及阶段验收见 [V0.2 联网架构](docs/architecture/SYNC.md)。
+当前先实现用户系统与私人数据云同步，再考虑成就及排行榜。使用 Supabase（托管 PostgreSQL、Auth、RLS），不自建 Express 服务。项目已配置，profiles 模型已部署并验证双身份 RLS；账号基础代码、本地访问层及独立 IndexedDB 队列基础已实现，真实 Auth 链路、记录同步、绑定及 30 天清理仍待完成。详细架构及阶段验收见 [V0.2 联网架构](docs/architecture/SYNC.md)，进度与阻塞见 [开发交接](docs/architecture/DEVELOPMENT_HANDOFF.md)。
 
 最小范围：
 

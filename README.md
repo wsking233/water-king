@@ -54,8 +54,9 @@ Vite + React + TypeScript + CSS。前端状态与业务函数在同一项目中�
 - `src/main.tsx`：导航、记录流程、设置、备份与回顾界面。
 - `src/CupControl.tsx`、`src/cupMotion.ts`：可取消的长按交互与水位变化。
 - `src/EntryEditor.tsx`、`src/dataTools.ts`：补记编辑、备份校验与 7 天汇总。
+- `src/syncRepository.ts`：尚未接入页面的 IndexedDB 同步存储基础，包含账号隔离、设备标识、事务队列及确认出队；当前应用仍使用本地存储，不会上传。
+- `src/repository.ts`：记录与设置的统一访问接口，校验后原子写入原有本地存储，保留旧记录迁移路径。
 - `src/records.ts`：本地数据校验、按日统计与按杯汇总。
-- `src/repository.ts`：兼容旧存储的本地事务接口，校验后单次写入；写入失败保留原快照。
 - `src/AccountPanel.tsx`、`src/cloud/`：可选游客身份、昵称、公开配置与云模型。
 - `src/offline.ts`、`vite.config.js`：离线注册、主动更新、构建时生成静态资源缓存清单。
 - `public/`：主屏幕图标和 Web App manifest。

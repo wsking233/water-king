@@ -39,6 +39,7 @@ import {
   type Entry,
   type Kind,
 } from "./records";
+import { recordRepository } from "./repository";
 import "./style.css";
 import { useOfflineApp, prepareRefresh } from "./offline";
 import { EntryEditor } from "./EntryEditor";
@@ -51,7 +52,6 @@ import {
 } from "./dataTools";
 import { CupControl } from "./CupControl";
 import { appBuild } from "./build";
-import { createLocalRepository } from "./repository";
 import { AccountPanel } from "./AccountPanel";
 const labels = { water: "喝水", small: "嘘嘘" };
 type Tab = "today" | "history" | "review" | "me";
@@ -116,11 +116,6 @@ function BottomSheet({
   );
 }
 function App() {
-  // Access browser storage lazily so unavailable storage reaches the error UI.
-  const [repository] = useState(() => createLocalRepository({
-    getItem: (key) => localStorage.getItem(key),
-    setItem: (key, value) => localStorage.setItem(key, value),
-  }));
   const [pendingBackup, setPendingBackup] = useState<Store | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -147,7 +142,7 @@ function App() {
   }
   const [initial] = useState(() => {
     try {
-      const state = repository.read();
+      const state = recordRepository.load();
       return { ...state, error: "" };
     } catch {
       return {
@@ -215,7 +210,7 @@ function App() {
     const sync = (e: StorageEvent) => {
       if (e.key !== STORE_KEY && e.key !== null) return;
       try {
-        const state = repository.read();
+        const state = recordRepository.load();
         setEntries(state.entries);
         setCup(state.cup);
         setNotice(null);
@@ -252,7 +247,7 @@ function App() {
     nextGoal: number | null = goal,
   ) {
     try {
-      repository.save({ entries: next, cup: nextCup, goal: nextGoal });
+      recordRepository.save({ entries: next, cup: nextCup, goal: nextGoal });
       setLastDrink(null);
       setRefillUndo(null);
       setCup(nextCup);

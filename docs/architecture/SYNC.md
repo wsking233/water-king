@@ -1,6 +1,6 @@
 # V0.2 用户与云同步架构及开发任务
 
-状态：WK-01 本地事务接口已实现；WK-02 账号基础已编码、数据库隔离已验证，真实 Auth 链路待验证；WK-03～06 尚未实现。产品已确认规则见 `docs/product/USER_SYSTEM.md`；已实现能力以根目录 README 为准。
+状态：WK-01 本地访问层及 WK-03/04 存储基础已开发；WK-02 账号基础已编码、数据库隔离已验证，真实 Auth 链路待验证；记录云同步尚未接通。产品已确认规则见 `docs/product/USER_SYSTEM.md`；已实现能力以根目录 README 为准。
 
 ## 目标与边界
 
@@ -49,6 +49,8 @@ React 页面
 ## 阶段任务和验收
 
 ### WK-01 数据层重构
+
+开发进度：已拆分 `RecordRepository` / `SettingsRepository` 和本地实现，页面读写统一经过 Repository；保留原存储键与 JSON 格式。27 项自动测试及 Pages 路径构建通过；离线、触摸与 iPhone 回归留待人工，尚不宣称全部验收完成。
 分离页面与持久化逻辑，定义 RecordRepository/SettingsRepository 接口；兼容旧 `water-king.state.v2` 和 v1 记录及 v1 JSON 备份。先保持页面行为不变；增加迁移及失败回滚测试。**完成标准**：原有喝水、嘘嘘、编辑、删除、撤销、跨日水位、离线和备份全回归通过。
 
 ### WK-02 Supabase 身份与数据库
@@ -56,7 +58,7 @@ React 页面
 
 本次进度（2026-10-15）：
 
-- WK-01：`RecordRepository` 统一读写现有完整 Store（记录、设置、设备杯），沿用 localStorage 单快照事务；旧 v1/v2、存储失败及非法替换测试通过。IndexedDB 与待同步队列留在 WK-03，不提前改变存储来源。
+- WK-01：沿用远端已有 `RecordRepository` / `SettingsRepository` 和 localStorage 单快照事务，未用重复实现替换；旧 v1/v2、存储失败及非法替换测试通过。已合入远端 WK-03/04 IndexedDB 队列基础，其尚未接入页面，不提前改变存储来源。
 - WK-02：主动游客登录、SDK 会话恢复、跨标签页创建互斥、云端昵称和失败提示已编码。尚未开放账号切换，不会自动关联或上传本机记录。
 - 数据模型：`src/cloud/models.ts` 是模型入口，生成 `supabase/schema.sql` 后由已授权的 Supabase 部署工具建表。原生 Supabase 不会因前端类型自动建表，浏览器也不应持有 DDL 凭据。只部署 profiles；其余同步模型暂为接口。
 - 数据库验证：事务内模拟两个 authenticated 身份，自己的昵称可读写，他人信息不可见、不可改、不可冒充插入，user_id 不可转移，anon 无权读取。测试最终 rollback；不留下虚拟账号。安全 Advisor 唯一提示为允许匿名游客访问自己的 profile，符合 US-01/04，非公开 anon 访问。
@@ -64,9 +66,13 @@ React 页面
 - 尚未完成 WK-02 全部验收，更不代表 WK-03～06 完成；30 天游客过期清理必须在完整云同步版本发布前补齐。
 
 ### WK-03 同步队列
+
+开发进度：新增独立 `SyncRepository`，IndexedDB 同事务写入快照与 outbox；新增/编辑/删除生成稳定 mutationId、递增 expectedRevision 和删除墓碑；提供匹配服务端确认后出队接口，队列重开可恢复。仅完成本地基础，**尚未接入页面、网络 Worker、服务端幂等 RPC、拉取游标或冲突处理**，不构成已实现的云同步。
 IndexedDB 本地事务、待同步队列、幂等 RPC / 服务端冲突检测、增量拉取、删除墓碑和游标；不强制用户联网才能操作。**完成标准**：断网新增/编辑/删除、断点续传与重复发送不重复入库；冲突不丢数据。
 
 ### WK-04 多设备与首次数据迁移
+
+开发进度：IndexedDB 安装实例 deviceId 持久化，账号命名空间隔离，本地模式不产生上传队列；杯子操作指定本机 deviceId。首次导入确认、跨设备恢复及账号切换页面尚未实现。
 为安装实例生成 deviceId，按账号合并历史数据，按 deviceId 保存当前杯；处理从 localStorage / 备份首次上传。**完成标准**：iPhone 与 iPad 今日饮水总计一致、各自杯水位独立；换机恢复记录与用户设置；重复导入不重复计数。
 
 ### WK-05 正式账号升级
