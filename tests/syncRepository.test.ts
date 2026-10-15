@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { IDBFactory } from "fake-indexeddb";
 import { SyncRepository } from "../src/syncRepository.ts";
 import { newCup, updateProgress } from "../src/records.ts";
+import type { ChangePage } from "../src/syncProtocol.ts";
 
 async function fixture() {
   const factory = new IDBFactory();
@@ -99,5 +100,63 @@ test("an IndexedDB transaction failure rolls back state and every newly queued m
   assert.deepEqual((await r.load("a"))?.state, before);
   assert.deepEqual(await r.pending("a"), queueBefore);
   db.close();
+  r.close();
+});
+
+async function clean(r: SyncRepository, owner: string) {
+  for (const m of await r.pending(owner))
+    await r.acknowledge(owner, m.sequence, m.mutationId, m.expectedRevision + 1);
+}
+test("pull merges independent records and tombstones without copying another device's cup", async () => {
+  const { repository: r } = await fixture();
+  const state = updateProgress({ entries: [], cup: newCup(), goal: 2000 }, 10);
+  await r.save("a", state);
+  await clean(r, "a");
+  const remote = { id: "other", kind: "water" as const, amount: 25, at: "2026-01-01T00:00:00Z", cupId: "other-cup" };
+  await r.applyPage("a", { cursor: "4", hasMore: false, changes: [
+    { entity: "record", entityId: state.entries[0].id, revision: 2, cursor: "1", value: null },
+    { entity: "record", entityId: remote.id, revision: 1, cursor: "2", value: remote },
+    { entity: "settings", entityId: "settings", revision: 2, cursor: "3", value: { goal: null } },
+    { entity: "cup", entityId: "other-device", revision: 1, cursor: "4", value: newCup(500) },
+  ] }, null);
+  const loaded = await r.load("a");
+  assert.deepEqual(loaded?.state.entries, [remote]);
+  assert.deepEqual(loaded?.state.cup, state.cup);
+  assert.equal(loaded?.state.goal, null);
+  assert.equal(loaded?.cursor, "4");
+  await r.save("a", { ...loaded!.state, entries: [] });
+  assert.equal((await r.pending("a"))[0].expectedRevision, 1);
+  r.close();
+});
+test("a pull arriving during local editing preserves the edit and its durable queue", async () => {
+  const { repository: r } = await fixture();
+  const state = updateProgress({ entries: [], cup: newCup() }, 10);
+  await r.save("a", state);
+  await clean(r, "a");
+  const edited = { ...state, entries: [{ ...state.entries[0], amount: 20 }] };
+  await r.save("a", edited);
+  const queue = await r.pending("a");
+  await r.applyPage("a", { cursor: "2", hasMore: false, changes: [
+    { entity: "record", entityId: state.entries[0].id, revision: 2, cursor: "2", value: null },
+  ] }, null);
+  assert.deepEqual((await r.load("a"))?.state.entries, edited.entries);
+  assert.deepEqual(await r.pending("a"), queue);
+  r.close();
+});
+test("bad pages, stale cursors and impossible cup water roll back data and cursor together", async () => {
+  const { repository: r } = await fixture();
+  const state = updateProgress({ entries: [], cup: newCup() }, 10);
+  await r.save("a", state);
+  await clean(r, "a");
+  const impossible: ChangePage = { cursor: "1", hasMore: false, changes: [
+    { entity: "record", entityId: state.entries[0].id, revision: 2, cursor: "1", value: { ...state.entries[0], amount: 500 } },
+  ] };
+  await assert.rejects(r.applyPage("a", impossible, null));
+  assert.deepEqual((await r.load("a"))?.state, state);
+  assert.equal((await r.load("a"))?.cursor, null);
+  await r.applyPage("a", { cursor: "0", hasMore: false, changes: [] }, null);
+  await assert.rejects(r.applyPage("a", { cursor: "0", hasMore: false, changes: [] }, null));
+  assert.equal((await r.load("a"))?.cursor, "0");
+  await assert.rejects(r.applyPage("a", { cursor: "0", hasMore: true, changes: [] }, "0"));
   r.close();
 });

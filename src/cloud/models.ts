@@ -1,3 +1,5 @@
+import type { EntityKind, EntityValue } from "../syncProtocol.ts";
+
 /** Application models. These types do not grant browsers schema privileges. */
 export const profileModel = {
   table: "profiles",
@@ -14,35 +16,31 @@ export type Profile = {
   created_at: string;
 };
 
-// Preserve old string IDs on migration; historical IDs need not be UUIDs.
-export type CloudRecord = {
-  id: string;
+// Records, settings and cups use the same version protocol and JSON payloads;
+// record payloads preserve legacy IDs/cupId and local-time-compatible timestamps.
+export type SyncEntityRow = {
   user_id: string;
-  device_id: string;
-  kind: "water" | "small";
-  amount: number;
-  at: string;
-  cup_id: string | null;
+  entity: EntityKind;
+  entity_id: string;
   revision: number;
-  deleted_at: string | null;
+  cursor: string;
+  value: EntityValue;
   updated_at: string;
 };
-export type CloudSettings = {
+export type SyncHeadRow = {
   user_id: string;
-  daily_goal: number | null;
-  revision: number;
-  updated_at: string;
+  cursor: string;
 };
-export type DeviceCup = {
+export type SyncReceiptRow = {
   user_id: string;
-  device_id: string;
-  cup_id: string;
-  capacity: number;
-  revision: number;
-  updated_at: string;
+  mutation_id: string;
+  request: Json;
+  response: Json;
 };
 
-/** Only profiles is deployed at WK-02; sync models are contracts for WK-03. */
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
+/** Private tables are deliberately absent from the public client schema. */
 export type Database = {
   public: {
     Tables: {
@@ -54,7 +52,16 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      sync_apply: {
+        Args: { p_mutation_id: string; p_entity: string; p_entity_id: string; p_expected_revision: number; p_value: Json };
+        Returns: Json;
+      };
+      sync_pull: {
+        Args: { p_after?: string; p_limit?: number };
+        Returns: Json;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

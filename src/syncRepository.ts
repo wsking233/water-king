@@ -1,4 +1,5 @@
 import { readStore, type Store } from "./records.ts";
+import { parsePage, type ChangePage } from "./syncProtocol.ts";
 
 export type Mutation = {
   owner: string;
@@ -125,6 +126,48 @@ export class SyncRepository {
     const result = await request(tx.objectStore("outbox").index("owner").getAll(owner));
     await done;
     return result as Mutation[];
+  }
+
+  /** Apply a whole page and its cursor atomically. Never overwrite queued edits. */
+  async applyPage(owner: string, input: ChangePage, expectedCursor: string | null): Promise<void> {
+    const page = parsePage(input, expectedCursor ?? "0");
+    const tx = this.db.transaction(["snapshots", "outbox"], "readwrite");
+    const done = completion(tx);
+    try {
+      const snapshots = tx.objectStore("snapshots");
+      const snapshot = await request(snapshots.get(owner)) as Snapshot | undefined;
+      if (!snapshot || snapshot.cursor !== expectedCursor) throw Error("本地同步状态已变化，请重试");
+      const pending = await request(tx.objectStore("outbox").index("owner").getAll(owner)) as Mutation[];
+      const dirty = new Set(pending.map((m) => `${m.entity}:${m.entityId}`));
+      const entries = new Map(snapshot.state.entries.map((e) => [e.id, e]));
+      let cup = snapshot.state.cup;
+      let goal = snapshot.state.goal;
+      const revisions = { ...snapshot.revisions };
+      for (const change of page.changes) {
+        const key = `${change.entity}:${change.entityId}`;
+        if (dirty.has(key) || (revisions[key] ?? 0) >= change.revision) continue;
+        if (change.entity === "record") {
+          if (change.value === null) entries.delete(change.entityId);
+          else entries.set(change.entityId, change.value as Store["entries"][number]);
+        } else if (change.entity === "settings") {
+          goal = (change.value as { goal: number | null }).goal;
+        } else {
+          // Another device's cup never changes this device's water level.
+          if (change.entityId !== this.deviceId) continue;
+          cup = change.value as Store["cup"];
+        }
+        revisions[key] = change.revision;
+      }
+      const state = readStore(JSON.stringify({
+        entries: [...entries.values()].sort((a,b) => Date.parse(b.at)-Date.parse(a.at)), cup, goal,
+      }), null);
+      snapshots.put({ ...snapshot, state, revisions, cursor: page.cursor } satisfies Snapshot);
+    } catch (error) {
+      tx.abort();
+      await done.catch(() => {});
+      throw error;
+    }
+    await done;
   }
 
   /** Only a server acknowledgment of the exact mutation can remove it. */
