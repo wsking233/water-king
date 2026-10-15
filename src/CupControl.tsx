@@ -110,6 +110,7 @@ export function CupControl({
           }
         }}
       >
+        <span className="mug-handle" aria-hidden="true" />
         <span className="glass-rim" />
         <span className="glass-body">
           <span
@@ -119,7 +120,7 @@ export function CupControl({
             <span className="water-wave" />
           </span>
           <span className="glass-shine" />
-          <span className="glass-ticks" />
+
           <Droplet className="glass-drop" size={28} />
         </span>
       </button>

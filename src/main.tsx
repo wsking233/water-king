@@ -168,9 +168,29 @@ function App() {
     [blocked, setBlocked] = useState(Boolean(initial.error)),
     [error, setError] = useState(initial.error);
   const [tab, setTab] = useState<Tab>("today"),
-    [sheet, setSheet] = useState<Sheet>(null),
+    [sheetSnapshot, setSheet] = useState<Sheet>(null),
     [amount, setAmount] = useState("250"),
     [now, setNow] = useState(new Date());
+  const sheet = (() => {
+    if (
+      !sheetSnapshot ||
+      typeof sheetSnapshot !== "object" ||
+      !("members" in sheetSnapshot) ||
+      !sheetSnapshot.cupId
+    )
+      return sheetSnapshot;
+    const members = entries.filter(
+      (entry) =>
+        entry.kind === "water" &&
+        entry.cupId === sheetSnapshot.cupId &&
+        dayKey(new Date(entry.at)) === dayKey(new Date(sheetSnapshot.at)),
+    );
+    return {
+      ...sheetSnapshot,
+      members,
+      amount: members.reduce((sum, entry) => sum + entry.amount, 0),
+    };
+  })();
   const [notice, setNotice] = useState<{
     text: string;
     undo?: string;
@@ -298,7 +318,13 @@ function App() {
       )
     ) {
       setNotice({ text: "记录已删除", restore: [entry] });
-      setSheet(null);
+      if (
+        !sheet ||
+        typeof sheet !== "object" ||
+        !("members" in sheet) ||
+        !sheet.cupId
+      )
+        setSheet(null);
     }
   }
   function editEntry(entry: Entry | null) {
@@ -403,7 +429,7 @@ function App() {
             </h3>
             <p>
               {tab === "today"
-                ? "长按水杯，或轻点侧边「嘬一口」。"
+                ? "长按水杯，或轻点下方「嘬一口」。"
                 : "用上方日期切换，看看其他日子的记录。"}
             </p>
           </div>
@@ -411,6 +437,46 @@ function App() {
       </div>
     );
   }
+  const notification = notice && (
+    <div className="toast" role="status">
+      <Check size={18} />
+      <span>{notice.text}</span>
+      {notice.restore && (
+        <button
+          onClick={() => {
+            const currentIds = new Set(entries.map((e) => e.id));
+            const next = [
+              ...notice.restore!.filter((e) => !currentIds.has(e.id)),
+              ...entries,
+            ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+            try {
+              readStore(JSON.stringify({ entries: next, cup, goal }), null);
+              persist(next, "记录已恢复");
+            } catch {
+              setError("当前杯子状态已变化，无法直接撤销。可通过补记恢复。");
+            }
+          }}
+        >
+          撤销删除
+        </button>
+      )}
+      {notice.undo && (
+        <button
+          onClick={() => {
+            if (
+              persist(
+                entries.filter((e) => e.id !== notice.undo),
+                "已撤销记录",
+              )
+            )
+              setSheet(null);
+          }}
+        >
+          撤销
+        </button>
+      )}
+    </div>
+  );
   return (
     <div className="app">
       <header className="app-header">
@@ -502,21 +568,38 @@ function App() {
                 onCommit={commitProgress}
                 onHolding={setHolding}
               />
-              <button
-                className="refill"
-                disabled={blocked || holding}
-                onClick={() =>
-                  persist(
-                    entries,
-                    "已开始新的一杯",
-                    undefined,
-                    newCup(cup.capacity),
-                  )
-                }
-              >
-                <Plus size={18} />
-                再接一杯<span>保留已喝水量，进度归零</span>
-              </button>
+              <div className="cup-actions">
+                <button
+                  className="sip-button"
+                  disabled={blocked || holding || progress === cup.capacity}
+                  onClick={() =>
+                    commitProgress(Math.min(cup.capacity, progress + 10))
+                  }
+                >
+                  <Droplet size={23} />
+                  <span>嘬一口</span>
+                  <span className="quick-amount">
+                    {progress === cup.capacity
+                      ? "已喝完"
+                      : `+${Math.min(10, cup.capacity - progress)} ml`}
+                  </span>
+                </button>
+                <button
+                  className="refill"
+                  disabled={blocked || holding}
+                  onClick={() =>
+                    persist(
+                      entries,
+                      "已开始新的一杯",
+                      undefined,
+                      newCup(cup.capacity),
+                    )
+                  }
+                >
+                  <Plus size={18} />
+                  再接一杯
+                </button>
+              </div>
             </section>
             <div className="body-stats">
               <button
@@ -831,25 +914,6 @@ function App() {
           </>
         )}
       </main>
-      {tab === "today" && (
-        <div className="sip-float">
-          <button
-            className="sip-button"
-            disabled={blocked || holding || progress === cup.capacity}
-            onClick={() =>
-              commitProgress(Math.min(cup.capacity, progress + 10))
-            }
-          >
-            <Droplet size={23} />
-            <span>嘬一口</span>
-            <span className="quick-amount">
-              {progress === cup.capacity
-                ? "已喝完"
-                : `+${Math.min(10, cup.capacity - progress)} ml`}
-            </span>
-          </button>
-        </div>
-      )}
       <nav className="tab-bar" aria-label="底部导航">
         {[
           { id: "today", label: "今天", icon: GlassWater },
@@ -868,51 +932,7 @@ function App() {
           </button>
         ))}
       </nav>
-      {notice && (
-        <div
-          className={`toast ${tab === "today" ? "cup-toast" : ""}`}
-          role="status"
-        >
-          <Check size={18} />
-          <span>{notice.text}</span>
-          {notice.restore && (
-            <button
-              onClick={() => {
-                const currentIds = new Set(entries.map((e) => e.id));
-                const next = [
-                  ...notice.restore!.filter((e) => !currentIds.has(e.id)),
-                  ...entries,
-                ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-                try {
-                  readStore(JSON.stringify({ entries: next, cup, goal }), null);
-                  persist(next, "记录已恢复");
-                } catch {
-                  setError(
-                    "当前杯子状态已变化，无法直接撤销。可通过补记恢复。",
-                  );
-                }
-              }}
-            >
-              撤销删除
-            </button>
-          )}
-          {notice.undo && (
-            <button
-              onClick={() => {
-                if (
-                  persist(
-                    entries.filter((e) => e.id !== notice.undo),
-                    "已撤销记录",
-                  )
-                )
-                  setSheet(null);
-              }}
-            >
-              撤销
-            </button>
-          )}
-        </div>
-      )}
+      {!sheet && notification}
       {sheet && (
         <BottomSheet
           title={
@@ -934,6 +954,7 @@ function App() {
           }
           close={() => setSheet(null)}
         >
+          {notification}
           {error && (
             <div role="alert" className="error">
               {error}
@@ -1196,6 +1217,11 @@ function App() {
                     <span>{sheet.members.length} 次 · 可逐条修正</span>
                   </div>
                   <div className="cup-details">
+                    {sheet.members.length === 0 && (
+                      <p className="cup-empty">
+                        这杯的记录已删完，可撤销刚才的删除。
+                      </p>
+                    )}
                     {sheet.members.map((entry) => (
                       <div className="cup-detail-row" key={entry.id}>
                         <span>
@@ -1225,7 +1251,7 @@ function App() {
                   </div>
                   <button
                     className="delete-record"
-                    disabled={blocked}
+                    disabled={blocked || sheet.members.length === 0}
                     onClick={() => {
                       if (
                         window.confirm(
