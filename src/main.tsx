@@ -34,7 +34,7 @@ import {
   type Kind,
 } from "./records";
 import "./style.css";
-const labels = { water: "喝水", small: "小便" };
+const labels = { water: "喝水", small: "嘘嘘" };
 type Tab = "today" | "history" | "rank" | "me";
 type Sheet = Kind | "clear" | Entry | null;
 function Icon({ kind }: { kind: Kind }) {
@@ -199,7 +199,7 @@ function App() {
       amount: 1,
       at: new Date().toISOString(),
     };
-    if (persist([entry, ...entries], "已记录小便 1 次", entry.id))
+    if (persist([entry, ...entries], "已记录嘘嘘 1 次", entry.id))
       setSheet(null);
   }
   const state: Store = { entries, cup };
@@ -447,7 +447,7 @@ function App() {
                   <Waves />
                 </span>
                 <span>
-                  <small>今日小便</small>
+                  <small>今日嘘嘘</small>
                   <strong>
                     {stats.small}
                     <em>次</em>
@@ -688,7 +688,7 @@ function App() {
             sheet === "water"
               ? "设置杯子容量"
               : sheet === "small"
-                ? "记录一次小便"
+                ? "记录一次嘘嘘"
                 : sheet === "clear"
                   ? "清空所有记录？"
                   : "记录详情"
