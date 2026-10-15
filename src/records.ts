@@ -112,3 +112,23 @@ export function updateProgress(
   });
   return { cup, entries };
 }
+
+export type RecordGroup = Entry & { members: Entry[] };
+/** Group one cup within a local day; legacy records stay individually editable. */
+export function groupRecords(entries: Entry[]): RecordGroup[] {
+  const groups = new Map<string, RecordGroup>();
+  for (const entry of [...entries].sort(
+    (a, b) => Date.parse(b.at) - Date.parse(a.at),
+  )) {
+    const key =
+      entry.kind === "water" && entry.cupId
+        ? JSON.stringify(["cup", entry.cupId, dayKey(new Date(entry.at))])
+        : JSON.stringify(["entry", entry.id]);
+    const group = groups.get(key);
+    if (group) {
+      group.amount += entry.amount;
+      group.members.push(entry);
+    } else groups.set(key, { ...entry, members: [entry] });
+  }
+  return [...groups.values()];
+}

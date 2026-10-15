@@ -122,3 +122,53 @@ test("deleting cup records updates progress and old cups stay independent", () =
   s = { ...s, entries: s.entries.slice(1) };
   assert.equal(cupProgress(s, now), 100);
 });
+
+import { groupRecords } from "../src/records.ts";
+test("group cups before truncation and keep interleaved urine separate", () => {
+  const a = {
+    id: "a",
+    kind: "water" as const,
+    amount: 10,
+    at: new Date(2026, 9, 15, 14).toISOString(),
+    cupId: "cup-a",
+  };
+  const b = {
+    ...a,
+    id: "b",
+    amount: 20,
+    at: new Date(2026, 9, 15, 15).toISOString(),
+  };
+  const urine = {
+    id: "u",
+    kind: "small" as const,
+    amount: 1,
+    at: new Date(2026, 9, 15, 14, 30).toISOString(),
+  };
+  const groups = groupRecords([a, urine, b]);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].amount, 30);
+  assert.deepEqual(
+    groups[0].members.map((e) => e.id),
+    ["b", "a"],
+  );
+  assert.equal(a.amount, 10);
+  assert.equal(groups[1].kind, "small");
+});
+test("grouping does not merge different cups, legacy entries, or different dates", () => {
+  const a = {
+    id: "a",
+    kind: "water" as const,
+    amount: 10,
+    at: new Date(2026, 9, 15, 14).toISOString(),
+    cupId: "cup-a",
+  };
+  const input = [
+    a,
+    { ...a, id: "b", cupId: "cup-b" },
+    { ...a, id: "c", cupId: undefined },
+    { ...a, id: "d", cupId: undefined },
+    { ...a, id: "e", at: new Date(2026, 9, 16, 14).toISOString() },
+  ];
+  assert.equal(groupRecords(input).length, 5);
+  assert.equal(groupRecords([]).length, 0);
+});

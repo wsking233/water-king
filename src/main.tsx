@@ -30,13 +30,15 @@ import {
   totals,
   validAmount,
   dayKey,
+  groupRecords,
+  type RecordGroup,
   type Entry,
   type Kind,
 } from "./records";
 import "./style.css";
 const labels = { water: "喝水", small: "嘘嘘" };
 type Tab = "today" | "history" | "rank" | "me";
-type Sheet = Kind | "clear" | Entry | null;
+type Sheet = Kind | "clear" | Entry | RecordGroup | null;
 function Icon({ kind }: { kind: Kind }) {
   return kind === "water" ? <Droplet /> : <Waves />;
 }
@@ -252,7 +254,7 @@ function App() {
     (e) => filter === "all" || e.kind === filter,
   );
   const days = new Set(entries.map((e) => dayKey(new Date(e.at)))).size;
-  function recordList(list: Entry[]) {
+  function recordList(list: RecordGroup[]) {
     return (
       <div className="record-list">
         {list.length ? (
@@ -267,12 +269,17 @@ function App() {
                 <Icon kind={e.kind} />
               </span>
               <span className="record-name">
-                <strong>{labels[e.kind]}</strong>
+                <strong>
+                  {e.kind === "water" && e.cupId ? "一杯水" : labels[e.kind]}
+                </strong>
                 <small>
                   {new Date(e.at).toLocaleTimeString("zh-CN", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
+                  {e.kind === "water" && e.cupId
+                    ? ` · ${e.members.length} 次饮水`
+                    : ""}
                 </small>
               </span>
               <span className="record-value">
@@ -319,7 +326,8 @@ function App() {
         )}
         {tab === "today" && (
           <>
-            <section className="greeting">
+            <section className="greeting home-greeting">
+              <h1>今天</h1>
               <p>
                 {now.toLocaleDateString("zh-CN", {
                   month: "long",
@@ -327,42 +335,21 @@ function App() {
                   weekday: "long",
                 })}
               </p>
-              <h1>今天，也要水水的。</h1>
-              <span>喝口水，跟身体打个招呼。</span>
             </section>
-            <section className="hydration">
-              <div className="hero-top">
-                <span>
-                  <Droplet size={16} /> 今日饮水
-                </span>
-                <span className="goal">参考 2,000 ml</span>
+            <section className="daily-summary" aria-label="今日饮水统计">
+              <div>
+                <span>今日饮水</span>
+                <strong className="total">
+                  {stats.water.toLocaleString()}
+                  <small> ml</small>
+                </strong>
               </div>
-              <div
-                className="water-orbit"
-                style={
-                  { "--progress": `${percent * 3.6}deg` } as React.CSSProperties
-                }
-              >
-                <div className="orbit-inside">
-                  <div className="cup" aria-hidden="true">
-                    <div
-                      className="water-level"
-                      style={{ height: `${Math.max(15, percent)}%` }}
-                    />
-                    <Droplet size={27} />
-                  </div>
-                  <div className="total">
-                    {stats.water.toLocaleString()}
-                    <span>ml</span>
-                  </div>
-                  <span className="progress-copy">
-                    {percent >= 100
-                      ? "今天的参考目标已达成"
-                      : `已完成 ${percent}%`}
-                  </span>
+              <div className="daily-goal">
+                <span>参考 2,000 ml · {percent}%</span>
+                <div className="daily-track">
+                  <span style={{ width: `${percent}%` }} />
                 </div>
               </div>
-              <p className="hero-caption">一点一滴，都是对自己的照顾</p>
             </section>
             <section className="cup-tracker">
               <div className="section-heading">
@@ -459,13 +446,13 @@ function App() {
             <section className="recent">
               <div className="section-heading">
                 <h2>
-                  今天的足迹 <span>{today.length}</span>
+                  今天的足迹 <span>{groupRecords(today).length}</span>
                 </h2>
                 <button onClick={() => navigate("history")}>
                   全部记录 <ArrowUpRight size={16} />
                 </button>
               </div>
-              {recordList(today.slice(0, 3))}
+              {recordList(groupRecords(today).slice(0, 3))}
             </section>
             <p className="gentle-note">
               按身体需要饮水，参考目标不是医疗建议。
@@ -525,10 +512,10 @@ function App() {
               ))}
             </div>
             <div className="history-summary">
-              <span>{history.length} 条记录</span>
+              <span>{groupRecords(history).length} 项记录</span>
               <span>点击查看详情</span>
             </div>
-            {recordList(history)}
+            {recordList(groupRecords(history))}
           </>
         )}
         {tab === "rank" && (
@@ -833,14 +820,67 @@ function App() {
                   })}
                 </p>
               </div>
-              <button
-                className="delete-record"
-                disabled={blocked}
-                onClick={() => remove(sheet)}
-              >
-                <Trash2 size={18} />
-                删除这条记录
-              </button>
+              {"members" in sheet && sheet.kind === "water" && sheet.cupId ? (
+                <>
+                  <div className="cup-detail-heading">
+                    <h3>饮水明细</h3>
+                    <span>{sheet.members.length} 次 · 可逐条修正</span>
+                  </div>
+                  <div className="cup-details">
+                    {sheet.members.map((entry) => (
+                      <div className="cup-detail-row" key={entry.id}>
+                        <span>
+                          {new Date(entry.at).toLocaleTimeString("zh-CN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </span>
+                        <strong>+{entry.amount} ml</strong>
+                        <button
+                          aria-label={`删除 ${entry.amount} ml 饮水明细`}
+                          disabled={blocked}
+                          onClick={() => remove(entry)}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="delete-record"
+                    disabled={blocked}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "删除这杯水的全部饮水记录？今日累计也会同步减少。",
+                        )
+                      ) {
+                        const ids = new Set(sheet.members.map((e) => e.id));
+                        if (
+                          persist(
+                            entries.filter((e) => !ids.has(e.id)),
+                            "这杯水的记录已删除",
+                          )
+                        )
+                          setSheet(null);
+                      }
+                    }}
+                  >
+                    <Trash2 size={18} />
+                    删除整杯记录
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="delete-record"
+                  disabled={blocked}
+                  onClick={() => remove(sheet)}
+                >
+                  <Trash2 size={18} />
+                  删除这条记录
+                </button>
+              )}
             </>
           )}
         </BottomSheet>
