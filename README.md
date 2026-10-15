@@ -41,8 +41,6 @@ Pages 地址（以工作流部署成功为准）：https://wsking233.github.io/w
 
 项目按 Pages 子路径 `/water-king/` 构建，无服务端路由。改仓库名时同步修改工作流里的 `--base`。如首次推送发生在 Pages 启用前，在 Actions 中重新运行工作流即可。
 
-`.openai/hosting.json` 是本次备用私有 Sites 预览的标识；Sites 发布与 GitHub Pages 自动部署相互独立。
-
 ## 开发方式
 
 默认直接在 `main` 修改、提交和推送，不创建功能分支或 PR。优先完成可验证的交互闭环；暂不加入云同步、真实多人排行榜或其他平台支持。
