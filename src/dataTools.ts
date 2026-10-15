@@ -63,11 +63,7 @@ export function upsertRecord(
   const old = state.entries.find((e) => e.id === input.id);
   if (input.id && !old) throw Error("这条记录已不存在，请重新打开记录列表。");
   const cupId =
-    old?.kind === "water" &&
-    input.kind === "water" &&
-    dayKey(new Date(old.at)) === dayKey(time)
-      ? old.cupId
-      : undefined;
+    old?.kind === "water" && input.kind === "water" ? old.cupId : undefined;
   const entry: Entry = {
     id: input.id ?? crypto.randomUUID(),
     kind: input.kind,

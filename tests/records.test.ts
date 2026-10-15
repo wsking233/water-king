@@ -101,11 +101,14 @@ test("progress boundaries, sip remainder, and state restoration", () => {
   for (const n of [-1, 251, 0.5, NaN])
     assert.throws(() => updateProgress(s, n, now));
 });
-test("next day begins fresh while retaining previous records", () => {
+test("crossing midnight retains cup progress and assigns new drinks to the new day", () => {
   const nextDay = new Date(2026, 9, 16, 0, 1);
   let s = updateProgress(empty(), 100, now);
-  assert.equal(cupProgress(s, nextDay), 0);
-  s = updateProgress(s, 10, nextDay);
+  assert.equal(cupProgress(s, nextDay), 100);
+  const id = s.cup.id;
+  s = updateProgress(s, 110, nextDay);
+  assert.equal(s.cup.id, id);
+  assert.equal(cupProgress(readStore(JSON.stringify(s), null), nextDay), 110);
   assert.equal(totals(s.entries).water, 110);
   assert.equal(totals(todayEntries(s.entries, nextDay)).water, 10);
 });
@@ -194,4 +197,17 @@ test("goal is optional in existing storage and persisted in new storage", () => 
     assert.throws(() => readStore(JSON.stringify({ ...s, goal }), null));
   assert.equal(validGoal(2000), true);
   assert.equal(validGoal(0), false);
+});
+
+test("partial refill and undo preserve records and next drinks use the right cup", () => {
+  const original = updateProgress({ ...empty(), goal: 1800 }, 150, now);
+  const filled = { ...original, cup: newCup(250, now) };
+  assert.equal(cupProgress(filled), 0);
+  assert.equal(totals(filled.entries).water, 150);
+  const undone = { ...filled, cup: original.cup };
+  assert.equal(cupProgress(undone), 150);
+  const next = updateProgress(filled, 20, now);
+  assert.equal(cupProgress(next), 20);
+  assert.equal(totals(next.entries).water, 170);
+  assert.equal(next.goal, 1800);
 });

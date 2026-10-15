@@ -2157,3 +2157,52 @@ body {
     animation: none;
   }
 }
+
+/* The whole presentation is the hold target; actions remain separate. */
+.hold-cup-area {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border-radius: 20px;
+  padding: 10px 0 16px;
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.hold-cup-area:active:not(:disabled) {
+  transform: none;
+}
+.hold-cup-area:disabled {
+  opacity: 1;
+}
+.hold-cup-area .hold-cup {
+  pointer-events: none;
+  touch-action: auto;
+  transition: transform 160ms ease;
+}
+.hold-cup-area.is-holding {
+  background: #f5fafc;
+}
+.hold-cup-area.is-holding .hold-cup {
+  transform: rotate(-4deg);
+}
+.hold-cup-area .hold-hint {
+  display: block;
+}
+.cup-undo-row {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 44px;
+}
+.cup-undo-row .undo-sip {
+  position: static;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hold-cup-area .hold-cup {
+    transition: none;
+  }
+  .hold-cup-area.is-holding .hold-cup {
+    transform: none;
+  }
+}

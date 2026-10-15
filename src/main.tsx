@@ -158,6 +158,7 @@ function App() {
   });
   const [cup, setCup] = useState(initial.cup);
   const [holding, setHolding] = useState(false);
+  const [refillUndo, setRefillUndo] = useState<Cup | null>(null);
   const [lastDrink, setLastDrink] = useState<string | null>(null);
   const [goal, setGoal] = useState<number | null>(
     initial.goal === undefined ? 2000 : initial.goal,
@@ -219,6 +220,7 @@ function App() {
         setCup(state.cup);
         setNotice(null);
         setLastDrink(null);
+        setRefillUndo(null);
         setGoal(state.goal === undefined ? 2000 : state.goal);
         setBlocked(false);
         setError("");
@@ -254,6 +256,8 @@ function App() {
         STORE_KEY,
         JSON.stringify({ entries: next, cup: nextCup, goal: nextGoal }),
       );
+      setLastDrink(null);
+      setRefillUndo(null);
       setCup(nextCup);
       setGoal(nextGoal);
       setEntries(next);
@@ -429,7 +433,7 @@ function App() {
             </h3>
             <p>
               {tab === "today"
-                ? "长按水杯，或轻点下方「嘬一口」。"
+                ? "长按水杯展示区，或轻点下方「嘬一口」。"
                 : "用上方日期切换，看看其他日子的记录。"}
             </p>
           </div>
@@ -541,27 +545,33 @@ function App() {
                 <h2>我的杯子</h2>
                 <span className="capacity-label">{cup.capacity} ml</span>
               </div>
-              {lastDrink && entries.some((e) => e.id === lastDrink) && (
+              <div className="cup-undo-row">
                 <button
                   className="undo-sip"
-                  disabled={blocked || holding}
+                  disabled={blocked || holding || (!lastDrink && !refillUndo)}
+                  style={{
+                    visibility: lastDrink || refillUndo ? "visible" : "hidden",
+                  }}
                   onClick={() => {
+                    const nextEntries = refillUndo
+                      ? entries
+                      : entries.filter((e) => e.id !== lastDrink);
                     if (
                       persist(
-                        entries.filter((e) => e.id !== lastDrink),
-                        "已撤销刚才的喝水",
+                        nextEntries,
+                        "已撤销",
+                        undefined,
+                        refillUndo ?? cup,
                       )
-                    ) {
-                      setLastDrink(null);
+                    )
                       setNotice(null);
-                    }
                   }}
                 >
-                  撤销刚才的喝水
+                  {refillUndo ? "撤销刚才的加满" : "撤销刚才的喝水"}
                 </button>
-              )}
+              </div>
               <CupControl
-                key={`${cup.id}:${dayKey(now)}:${progress}`}
+                key={`${cup.id}:${cup.capacity}:${progress}`}
                 capacity={cup.capacity}
                 progress={progress}
                 disabled={blocked}
@@ -586,18 +596,24 @@ function App() {
                 </button>
                 <button
                   className="refill"
-                  disabled={blocked || holding}
-                  onClick={() =>
-                    persist(
-                      entries,
-                      "已开始新的一杯",
-                      undefined,
-                      newCup(cup.capacity),
-                    )
-                  }
+                  disabled={blocked || holding || progress === 0}
+                  onClick={() => {
+                    const previous = cup;
+                    if (
+                      persist(
+                        entries,
+                        "水已加满",
+                        undefined,
+                        newCup(cup.capacity),
+                      )
+                    ) {
+                      setRefillUndo(previous);
+                      setNotice(null);
+                    }
+                  }}
                 >
                   <Plus size={18} />
-                  再接一杯
+                  {progress === 0 ? "水已满" : "加满水"}
                 </button>
               </div>
             </section>

@@ -62,7 +62,7 @@ test("backfill and edits preserve local day totals and prevent future records", 
     upsertRecord(s, { id: "missing", kind: "water", amount: 20, at }, now),
   );
 });
-test("editing an active-cup entry updates progress without overflow; changing day detaches", () => {
+test("editing an active-cup entry updates progress without overflow; changing day retains cup association", () => {
   const s = updateProgress(state(), 100, now);
   const entry = s.entries[0];
   const next = upsertRecord(s, { ...entry, amount: 80 }, now);
@@ -73,8 +73,8 @@ test("editing an active-cup entry updates progress without overflow; changing da
     { ...entry, at: new Date(2026, 9, 14, 14).toISOString() },
     now,
   );
-  assert.equal(moved[0].cupId, undefined);
-  assert.equal(cupProgress({ ...s, entries: moved }, now), 0);
+  assert.equal(moved[0].cupId, s.cup.id);
+  assert.equal(cupProgress({ ...s, entries: moved }, now), 100);
 });
 test("week summary includes empty dates, excludes outside dates, crosses month boundary", () => {
   const end = new Date(2026, 10, 3, 12);

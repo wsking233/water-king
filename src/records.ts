@@ -55,8 +55,8 @@ export const STORE_KEY = "water-king.state.v2";
 export function newCup(capacity = 250, now = new Date()): Cup {
   return { id: crypto.randomUUID(), capacity, day: dayKey(now) };
 }
-export function cupProgress(state: Store, now = new Date()) {
-  if (state.cup.day !== dayKey(now)) return 0;
+// Cup identity lasts until refill, independently of the calendar date.
+export function cupProgress(state: Store, _now = new Date()) {
   return state.entries
     .filter((e) => e.kind === "water" && e.cupId === state.cup.id)
     .reduce((sum, e) => sum + e.amount, 0);
@@ -94,12 +94,12 @@ export function updateProgress(
 ): Store {
   if (!Number.isInteger(target) || target < 0 || target > state.cup.capacity)
     throw Error("进度超出杯子容量");
-  const cup =
-    state.cup.day === dayKey(now) ? state.cup : newCup(state.cup.capacity, now);
+  const cup = state.cup;
   const current = cupProgress({ ...state, cup }, now);
   if (target === current) return { ...state, cup };
   if (target > current)
     return {
+      ...state,
       cup,
       entries: [
         {
@@ -119,7 +119,7 @@ export function updateProgress(
     remaining -= remove;
     return remove === e.amount ? [] : [{ ...e, amount: e.amount - remove }];
   });
-  return { cup, entries };
+  return { ...state, cup, entries };
 }
 
 export type RecordGroup = Entry & { members: Entry[] };

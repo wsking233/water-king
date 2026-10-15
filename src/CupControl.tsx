@@ -80,36 +80,35 @@ export function CupControl({
   }, []);
   const remaining = capacity - (holding ? preview : progress);
   return (
-    <div className={`hold-cup-area ${holding ? "is-holding" : ""}`}>
-      <button
-        className="hold-cup"
-        disabled={disabled || progress >= capacity}
-        aria-label="长按水杯记录喝水，松手保存"
-        onContextMenu={(e) => e.preventDefault()}
-        onPointerDown={(e) => {
-          if (!e.isPrimary || e.button !== 0) return;
+    <button
+      className={`hold-cup-area ${holding ? "is-holding" : ""}`}
+      disabled={disabled || progress >= capacity}
+      aria-label="长按水杯展示区记录喝水，松手保存"
+      onContextMenu={(e) => e.preventDefault()}
+      onPointerDown={(e) => {
+        if (!e.isPrimary || e.button !== 0) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start();
+      }}
+      onPointerUp={() => stop(true)}
+      onPointerCancel={() => stop(false)}
+      onLostPointerCapture={() => stop(false)}
+      onBlur={() => stop(false)}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
           e.preventDefault();
-          e.currentTarget.setPointerCapture(e.pointerId);
-          start();
-        }}
-        onPointerUp={() => stop(true)}
-        onPointerCancel={() => stop(false)}
-        onLostPointerCapture={() => stop(false)}
-        onBlur={() => stop(false)}
-        onKeyDown={(e) => {
-          if (e.key === " " || e.key === "Enter") {
-            e.preventDefault();
-            if (!e.repeat) start();
-          }
-          if (e.key === "Escape") stop(false);
-        }}
-        onKeyUp={(e) => {
-          if (e.key === " " || e.key === "Enter") {
-            e.preventDefault();
-            stop(true);
-          }
-        }}
-      >
+          if (!e.repeat) start();
+        }
+        if (e.key === "Escape") stop(false);
+      }}
+      onKeyUp={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          stop(true);
+        }
+      }}
+    >
+      <span className="hold-cup" aria-hidden="true">
         <span className="mug-handle" aria-hidden="true" />
         <span className="glass-rim" />
         <span className="glass-body">
@@ -123,21 +122,21 @@ export function CupControl({
 
           <Droplet className="glass-drop" size={28} />
         </span>
-      </button>
-      <div className="remaining-copy">
+      </span>
+      <span className="remaining-copy">
         <span>{remaining === 0 ? "这杯喝完啦" : "大约还剩"}</span>
         <strong>
           {remaining}
           <small> ml</small>
         </strong>
-      </div>
-      <p className="hold-hint">
+      </span>
+      <span className="hold-hint">
         {holding
           ? "水位慢慢下降，差不多就松手"
           : progress >= capacity
-            ? "再接一杯，继续你的节奏"
-            : "长按杯子喝水 · 松手记下来"}
-      </p>
-    </div>
+            ? "加满水，继续你的节奏"
+            : "长按此区域任意位置 · 松手记录"}
+      </span>
+    </button>
   );
 }
