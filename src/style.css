@@ -1015,3 +1015,133 @@ main {
     box-shadow: 0 0 60px #2f4c3610;
   }
 }
+
+.cup-tracker {
+  background: #fff;
+  border-radius: 22px;
+  padding: 6px 18px 4px;
+  margin-top: 16px;
+}
+.cup-tracker .section-heading {
+  margin: 4px 0 10px;
+}
+.cup-reading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cup-reading strong {
+  font-size: 30px;
+  font-weight: 650;
+}
+.cup-reading small {
+  font-size: 13px;
+  font-weight: 400;
+  color: #8b9b80;
+}
+.cup-reading > span {
+  font-size: 12px;
+  color: #7c906b;
+}
+.cup-slider {
+  width: 100%;
+  height: 48px;
+  accent-color: #2e7866;
+  cursor: pointer;
+  margin: 9px 0 0;
+  touch-action: pan-y;
+}
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #8e9d80;
+}
+.cup-tracker > p {
+  font-size: 11px;
+  color: #8e9d80;
+  line-height: 1.6;
+  margin: 15px 0;
+}
+.refill {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 7px;
+  min-height: 52px;
+  background: none;
+  border-top: 1px solid #edf1e7;
+  font-size: 13px;
+  color: #487b61;
+}
+.refill > span {
+  font-size: 10px;
+  color: #94a184;
+  margin-left: auto;
+}
+.body-stats {
+  grid-template-columns: 1fr;
+}
+.water-orbit {
+  width: 160px;
+  height: 160px;
+  margin: 14px auto;
+}
+.cup {
+  height: 42px;
+  width: 36px;
+  margin-bottom: 8px;
+}
+.cup > svg {
+  width: 20px;
+  left: 6px;
+  top: 7px;
+}
+.total {
+  font-size: 32px;
+}
+.hydration {
+  padding-bottom: 16px;
+}
+
+.cup-slider {
+  appearance: none;
+  background: transparent;
+}
+.cup-slider::-webkit-slider-runnable-track {
+  height: 12px;
+  border-radius: 12px;
+  background: linear-gradient(
+    to right,
+    #508f78 var(--fill),
+    #e5eddd var(--fill)
+  );
+}
+.cup-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-top: -9px;
+  background: #2e7866;
+  border: 5px solid #fff;
+  box-shadow: 0 1px 8px #245b4533;
+}
+.cup-slider::-moz-range-track {
+  height: 12px;
+  border-radius: 12px;
+  background: #e5eddd;
+}
+.cup-slider::-moz-range-progress {
+  height: 12px;
+  border-radius: 12px;
+  background: #508f78;
+}
+.cup-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2e7866;
+  border: 5px solid #fff;
+  box-shadow: 0 1px 8px #245b4533;
+}

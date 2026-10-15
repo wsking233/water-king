@@ -12,7 +12,6 @@ import {
   Trash2,
   Check,
   GlassWater,
-  Sprout,
   UserRound,
   ShieldCheck,
   Minus,
@@ -20,7 +19,13 @@ import {
 } from "lucide-react";
 import {
   KEY,
-  parseEntries,
+  STORE_KEY,
+  readStore,
+  newCup,
+  cupProgress,
+  updateProgress,
+  type Store,
+  type Cup,
   todayEntries,
   totals,
   validAmount,
@@ -29,17 +34,11 @@ import {
   type Kind,
 } from "./records";
 import "./style.css";
-const labels = { water: "喝水", small: "小便", large: "大便" };
+const labels = { water: "喝水", small: "小便" };
 type Tab = "today" | "history" | "rank" | "me";
 type Sheet = Kind | "clear" | Entry | null;
 function Icon({ kind }: { kind: Kind }) {
-  return kind === "water" ? (
-    <Droplet />
-  ) : kind === "small" ? (
-    <Waves />
-  ) : (
-    <Sprout />
-  );
+  return kind === "water" ? <Droplet /> : <Waves />;
 }
 function BottomSheet({
   title,
@@ -99,15 +98,22 @@ function BottomSheet({
 function App() {
   const [initial] = useState(() => {
     try {
-      return { entries: parseEntries(localStorage.getItem(KEY)), error: "" };
+      const state = readStore(
+        localStorage.getItem(STORE_KEY),
+        localStorage.getItem(KEY),
+      );
+      return { ...state, error: "" };
     } catch {
       return {
         entries: [] as Entry[],
+        cup: newCup(),
         error:
           "本地记录暂时无法读取，原数据未被覆盖。可前往「我的」清空后重新开始。",
       };
     }
   });
+  const [cup, setCup] = useState(initial.cup);
+  const [draft, setDraft] = useState<number | null>(null);
   const [entries, setEntries] = useState(initial.entries),
     [blocked, setBlocked] = useState(Boolean(initial.error)),
     [error, setError] = useState(initial.error);
@@ -131,9 +137,15 @@ function App() {
   }, []);
   useEffect(() => {
     const sync = (e: StorageEvent) => {
-      if (e.key !== KEY && e.key !== null) return;
+      if (e.key !== STORE_KEY && e.key !== null) return;
       try {
-        setEntries(parseEntries(localStorage.getItem(KEY)));
+        const state = readStore(
+          localStorage.getItem(STORE_KEY),
+          localStorage.getItem(KEY),
+        );
+        setEntries(state.entries);
+        setCup(state.cup);
+        setDraft(null);
         setBlocked(false);
         setError("");
       } catch {
@@ -156,9 +168,19 @@ function App() {
     window.scrollTo({ top: 0 });
     if (next === "history") setSelectedDate(new Date());
   }
-  function persist(next: Entry[], text: string, undo?: string) {
+  function persist(
+    next: Entry[],
+    text: string,
+    undo?: string,
+    nextCup: Cup = cup,
+  ) {
     try {
-      localStorage.setItem(KEY, JSON.stringify(next));
+      localStorage.setItem(
+        STORE_KEY,
+        JSON.stringify({ entries: next, cup: nextCup }),
+      );
+      setCup(nextCup);
+      setDraft(null);
       setEntries(next);
       setBlocked(false);
       setError("");
@@ -169,30 +191,40 @@ function App() {
       return false;
     }
   }
-  function add(kind: Kind) {
+  function add(kind: "small") {
     if (blocked) return;
-    if (kind === "water" && !validAmount(Number(amount))) {
-      setError("请输入 1–5000 ml 的整数。");
-      return;
-    }
-    const at = new Date();
-    const entry = {
+    const entry: Entry = {
       id: crypto.randomUUID(),
       kind,
-      amount: kind === "water" ? Number(amount) : 1,
-      at: at.toISOString(),
+      amount: 1,
+      at: new Date().toISOString(),
     };
-    setNow(at);
-    if (
-      persist(
-        [entry, ...entries],
-        `已记录${labels[kind]} ${entry.amount}${kind === "water" ? " ml" : " 次"}`,
-        entry.id,
-      )
-    )
+    if (persist([entry, ...entries], "已记录小便 1 次", entry.id))
       setSheet(null);
   }
+  const state: Store = { entries, cup };
+  const progress = cupProgress(state, now);
+  const displayed = draft ?? progress;
+  function commitProgress(value: number) {
+    if (blocked) return;
+    const date = new Date();
+    setNow(date);
+    const next = updateProgress(state, value, date);
+    if (!persist(next.entries, `本杯已喝 ${value} ml`, undefined, next.cup))
+      setDraft(null);
+    else setNotice(null);
+  }
+  function saveCapacity() {
+    if (!validAmount(Number(amount))) {
+      setError("请输入 1–5000 ml 的整数容量。");
+      return;
+    }
+    const nextCup =
+      Number(amount) === cup.capacity ? cup : newCup(Number(amount));
+    if (persist(entries, "杯子容量已保存", undefined, nextCup)) setSheet(null);
+  }
   function open(next: Sheet) {
+    if (next === "water") setAmount(String(cup.capacity));
     if (!blocked) setError("");
     setNotice(null);
     setSheet(next);
@@ -260,7 +292,7 @@ function App() {
             </h3>
             <p>
               {tab === "today"
-                ? "点击下方「喝水」，记下今天的小习惯。"
+                ? "拖动杯子进度，或点击「嘬一口」。"
                 : "用上方日期切换，看看其他日子的记录。"}
             </p>
           </div>
@@ -332,6 +364,83 @@ function App() {
               </div>
               <p className="hero-caption">一点一滴，都是对自己的照顾</p>
             </section>
+            <section className="cup-tracker">
+              <div className="section-heading">
+                <h2>我的杯子</h2>
+                <button onClick={() => open("water")} disabled={blocked}>
+                  容量 {cup.capacity} ml <ChevronRight size={16} />
+                </button>
+              </div>
+              <div className="cup-reading">
+                <strong>
+                  {displayed}
+                  <small> / {cup.capacity} ml</small>
+                </strong>
+                <span>
+                  {displayed === cup.capacity ? "这杯喝完啦" : "本杯已喝"}
+                </span>
+              </div>
+              <input
+                className="cup-slider"
+                style={
+                  {
+                    "--fill": `${(displayed / cup.capacity) * 100}%`,
+                  } as React.CSSProperties
+                }
+                type="range"
+                aria-label="本杯已喝水量"
+                aria-valuetext={`已喝 ${displayed} 毫升，共 ${cup.capacity} 毫升`}
+                min="0"
+                max={cup.capacity}
+                step="1"
+                value={displayed}
+                disabled={blocked}
+                onChange={(e) => setDraft(Number(e.target.value))}
+                onPointerUp={(e) =>
+                  commitProgress(Number(e.currentTarget.value))
+                }
+                onPointerCancel={() => setDraft(null)}
+                onKeyUp={(e) => {
+                  if (
+                    [
+                      "ArrowLeft",
+                      "ArrowRight",
+                      "ArrowUp",
+                      "ArrowDown",
+                      "Home",
+                      "End",
+                      "PageUp",
+                      "PageDown",
+                    ].includes(e.key)
+                  )
+                    commitProgress(Number(e.currentTarget.value));
+                }}
+                onBlur={(e) => {
+                  if (draft !== null)
+                    commitProgress(Number(e.currentTarget.value));
+                }}
+              />
+              <div className="slider-labels">
+                <span>还没喝</span>
+                <span>喝完一杯</span>
+              </div>
+              <p>拖动后松手保存，往回拖可修正本杯记录。</p>
+              <button
+                className="refill"
+                disabled={blocked}
+                onClick={() =>
+                  persist(
+                    entries,
+                    "已开始新的一杯",
+                    undefined,
+                    newCup(cup.capacity),
+                  )
+                }
+              >
+                <Plus size={18} />
+                再接一杯<span>保留已喝水量，进度归零</span>
+              </button>
+            </section>
             <div className="body-stats">
               <button onClick={() => open("small")} disabled={blocked}>
                 <span className="record-icon small">
@@ -341,19 +450,6 @@ function App() {
                   <small>今日小便</small>
                   <strong>
                     {stats.small}
-                    <em>次</em>
-                  </strong>
-                </span>
-                <Plus size={18} />
-              </button>
-              <button onClick={() => open("large")} disabled={blocked}>
-                <span className="record-icon large">
-                  <Sprout />
-                </span>
-                <span>
-                  <small>今日大便</small>
-                  <strong>
-                    {stats.large}
                     <em>次</em>
                   </strong>
                 </span>
@@ -417,7 +513,7 @@ function App() {
               </button>
             </div>
             <div className="filters" aria-label="记录类型">
-              {(["all", "water", "small", "large"] as const).map((kind) => (
+              {(["all", "water", "small"] as const).map((kind) => (
                 <button
                   key={kind}
                   aria-pressed={filter === kind}
@@ -529,12 +625,18 @@ function App() {
         <div className="action-dock">
           <button
             className="primary log-water"
-            onClick={() => open("water")}
-            disabled={blocked}
+            disabled={blocked || progress === cup.capacity}
+            onClick={() =>
+              commitProgress(Math.min(cup.capacity, progress + 10))
+            }
           >
-            <Plus size={23} />
-            <span>喝水，记一口</span>
-            <span className="quick-amount">{amount} ml</span>
+            <Droplet size={23} />
+            <span>{progress === cup.capacity ? "这杯喝完啦" : "嘬一口"}</span>
+            <span className="quick-amount">
+              {progress === cup.capacity
+                ? "去再接一杯"
+                : `+${Math.min(10, cup.capacity - progress)} ml`}
+            </span>
           </button>
         </div>
       )}
@@ -584,14 +686,12 @@ function App() {
         <BottomSheet
           title={
             sheet === "water"
-              ? "喝了多少水？"
+              ? "设置杯子容量"
               : sheet === "small"
                 ? "记录一次小便"
-                : sheet === "large"
-                  ? "记录一次大便"
-                  : sheet === "clear"
-                    ? "清空所有记录？"
-                    : "记录详情"
+                : sheet === "clear"
+                  ? "清空所有记录？"
+                  : "记录详情"
           }
           close={() => setSheet(null)}
         >
@@ -604,11 +704,11 @@ function App() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                add("water");
+                saveCapacity();
               }}
             >
               <p className="sheet-description">
-                选择水量，或输入你自己的杯量。
+                设置杯子的总容量。修改容量会开启新的一杯，已记录的饮水量会保留。
               </p>
               <div className="amount-control">
                 <button
@@ -623,7 +723,7 @@ function App() {
                 </button>
                 <label>
                   <input
-                    aria-label="饮水量"
+                    aria-label="杯子容量"
                     inputMode="numeric"
                     type="number"
                     min="1"
@@ -667,10 +767,10 @@ function App() {
               </div>
               <button className="primary" disabled={blocked}>
                 <Check size={20} />
-                记录 {amount || "0"} ml
+                保存容量 {amount || "0"} ml
               </button>
             </form>
-          ) : sheet === "small" || sheet === "large" ? (
+          ) : sheet === "small" ? (
             <>
               <div className="confirm-activity">
                 <span className={`record-icon ${sheet}`}>
@@ -696,7 +796,15 @@ function App() {
               <button
                 className="danger"
                 onClick={() => {
-                  if (persist([], "本地记录已清空")) setSheet(null);
+                  if (
+                    persist(
+                      [],
+                      "本地记录已清空",
+                      undefined,
+                      newCup(cup.capacity),
+                    )
+                  )
+                    setSheet(null);
                 }}
               >
                 确认清空全部记录
