@@ -56,6 +56,7 @@ self.addEventListener('fetch',event=>{
   };
 }
 export default defineConfig(({ command }) => ({
+  build: { rollupOptions: { output: { manualChunks: { supabase: ["@supabase/supabase-js"] } } } },
   define: {
     __APP_BUILD__: JSON.stringify(command === "serve" ? "本地开发" : buildId()),
   },

@@ -27,7 +27,18 @@ export class SyncWorker {
     this.cancel();
     const controller = new AbortController();
     const task = { owner, controller, promise: Promise.resolve(null as unknown as SyncResult) };
-    task.promise = this.synchronize(owner, controller.signal).finally(() => {
+    const execute = async (): Promise<SyncResult> => {
+      try {
+        if (typeof navigator !== "undefined" && navigator.locks)
+          return await navigator.locks.request(`water-king.sync:${owner}`, { signal: controller.signal },
+            () => this.synchronize(owner, controller.signal));
+        return await this.synchronize(owner, controller.signal);
+      } catch (error) {
+        if (controller.signal.aborted || this.currentOwner() !== owner) return { status: "stopped", uploaded: 0 };
+        throw error;
+      }
+    };
+    task.promise = execute().finally(() => {
       if (this.active === task) this.active = null;
     });
     this.active = task;

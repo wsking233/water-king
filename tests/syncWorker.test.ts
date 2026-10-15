@@ -120,3 +120,21 @@ test("multi-page pull resumes after its committed cursor and does not claim sync
   assert.equal((await r.load("a"))?.state.entries.find(e=>e.id===state.entries[0].id)?.amount, 20);
   r.close();
 });
+
+test("separate tab workers serialize a shared account queue rather than racing its pull cursor", async () => {
+  const { r } = await fixture();
+  let active = 0, maximum = 0, sends = 0;
+  const t = transport({ apply: async (_owner,m) => {
+    active++; maximum=Math.max(maximum,active); sends++;
+    await new Promise(resolve=>setTimeout(resolve,5));
+    active--;
+    return { status:"applied",mutationId:m.mutationId,revision:m.expectedRevision+1,cursor:String(m.sequence) };
+  } });
+  const a = new SyncWorker(r,t,()=>"a");
+  const b = new SyncWorker(r,t,()=>"a");
+  const results = await Promise.all([a.run("a"),b.run("a")]);
+  assert.deepEqual(results.map(result=>result.status),["synced","synced"]);
+  assert.equal(maximum,1);
+  assert.equal(sends,3);
+  r.close();
+});

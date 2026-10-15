@@ -2,8 +2,48 @@ import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getCloudClient } from "./cloud/client";
 import { defaultNickname, enterGuest, loadProfile } from "./cloud/identity";
+import type { DataAccess } from "./DataGate";
+import type { DataSnapshot } from "./dataSession";
+import { totals } from "./records";
 
-export function AccountPanel() {
+function ConnectSheet({ preview, accountId, access, close }: { preview: DataSnapshot; accountId: string; access: DataAccess; close: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [importLocal, setImportLocal] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement;
+    dialog.current!.showModal();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { controller.current?.abort(); dialog.current?.close(); document.body.style.overflow = overflow; previous?.focus(); };
+  }, []);
+  return <dialog ref={dialog} className="sheet" aria-labelledby="connect-title" onCancel={(event) => {
+    event.preventDefault(); controller.current?.abort(); close();
+  }}>
+    <div className="sheet-handle" />
+    <h2 id="connect-title">接入私人云同步</h2>
+    <p className="sheet-description account-id">目标账号：{accountId}</p>
+    <p className="sheet-description">本机有 {preview.state.entries.length} 条记录：约 {totals(preview.state.entries).water} ml 饮水、{totals(preview.state.entries).small} 次嘘嘘。当前杯容量 {preview.state.cup.capacity} ml。</p>
+    <p className="sheet-description">饮水、嘘嘘和每日目标仅本人可访问。当前杯子按设备独立；原本机数据保留，不会因本次接入而删除。</p>
+    <label className="sync-choice"><input type="radio" name="sync-import" checked={importLocal} disabled={working} onChange={() => setImportLocal(true)} />
+      <span>合并本机记录<small>按记录 ID 去重；云端已删除的记录不恢复。保留本机杯子；云端已有每日目标时沿用云端目标。</small></span></label>
+    <label className="sync-choice"><input type="radio" name="sync-import" checked={!importLocal} disabled={working} onChange={() => setImportLocal(false)} />
+      <span>仅恢复云端记录<small>不上传原本机记录；此设备没有云端杯子时开始新杯。</small></span></label>
+    <p className="sheet-description">如果相同 ID 存在不同内容，将暂停接入并保留两边数据。账号绑定与 30 天过期清理仍在开发，请保留备份。</p>
+    {error && <p className="account-error" role="alert">{error}</p>}
+    <button className="primary" disabled={working} onClick={async () => {
+      setWorking(true); setError("");
+      controller.current = new AbortController();
+      try { await access.connect(preview, importLocal, accountId, controller.current.signal); }
+      catch (cause) { setError(cause instanceof Error ? cause.message : "接入未完成，请重试"); setWorking(false); }
+    }}>{working ? "正在准备数据…" : "确认接入同步"}</button>
+    <button className="secondary" autoFocus onClick={() => { controller.current?.abort(); close(); }}>暂不接入</button>
+  </dialog>;
+}
+
+export function AccountPanel({ access }: { access: DataAccess }) {
   const [setup] = useState(() => {
     try { return { client: getCloudClient(), error: "" }; }
     catch { return { client: null, error: "账号服务配置有误，暂时无法连接。" }; }
@@ -16,6 +56,7 @@ export function AccountPanel() {
   const [error, setError] = useState(setup.error);
   const [message, setMessage] = useState("");
   const [profileRetry, setProfileRetry] = useState(0);
+  const [preview, setPreview] = useState<{ snapshot: DataSnapshot; accountId: string } | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const currentId = useRef<string | null>(null);
 
@@ -124,7 +165,22 @@ export function AccountPanel() {
           {busy ? "正在登录…" : online ? "游客登录" : "联网后可游客登录"}
         </button>
       </>}
-    <p>当前仅接入账号与昵称。饮水、嘘嘘、杯子和目标仍保存在本机，尚未上传。云同步、绑定与游客 30 天清理仍在开发。</p>
+    <p role="status">{access.sync.message}</p>
+    {!access.syncEnabled && <p>云同步正在准备中。当前仍可在本机记录和导出备份。</p>}
+    {access.syncEnabled && user && access.session.owner === "local" && <button className="primary" disabled={busy || !online} onClick={async () => {
+      try {
+        const snapshot = await access.session.read();
+        if (snapshot.error) { setError(snapshot.error); return; }
+        setPreview({ snapshot, accountId: user.id });
+      } catch { setError("本机数据暂时无法读取，尚未上传。"); }
+    }}>设置云同步</button>}
+    {access.syncEnabled && access.session.owner !== "local" && <>
+      <button className="primary" disabled={!online || access.sync.status === "syncing" || access.sync.status === "conflict"}
+        onClick={() => void access.synchronize()}> {access.sync.status === "syncing" ? "正在同步…" : "立即同步"}</button>
+      <p>全部记录默认私有。断网时先保存到本机，联网后补传。发生冲突时暂停同步，保留本机改动。</p>
+    </>}
+    <p>账号绑定与游客 30 天过期清理仍在开发，请保留备份。</p>
+    {preview && <ConnectSheet preview={preview.snapshot} accountId={preview.accountId} access={access} close={() => setPreview(null)} />}
     {error && <>
       <p className="account-error" role="alert">{error}</p>
       {user && <button disabled={!online || busy} onClick={() => setProfileRetry((n) => n + 1)}>重新读取昵称</button>}

@@ -2228,3 +2228,7 @@ body {
 }
 .account-edit button { min-width: 64px; min-height: 44px; border-radius: 12px; }
 .account-card .account-error { color: #a33f3f; }
+.sync-choice { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 12px 0; }
+.sync-choice input { flex: 0 0 auto; margin-top: 5px; }
+.sync-choice small { display: block; font-size: 13px; line-height: 1.6; color: #65727a; margin-top: 5px; }
+.sheet .account-error { color: #a33f3f; line-height: 1.6; }

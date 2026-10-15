@@ -22,7 +22,6 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import {
-  STORE_KEY,
   readStore,
   newCup,
   cupProgress,
@@ -39,7 +38,6 @@ import {
   type Entry,
   type Kind,
 } from "./records";
-import { recordRepository } from "./repository";
 import "./style.css";
 import { useOfflineApp, prepareRefresh } from "./offline";
 import { EntryEditor } from "./EntryEditor";
@@ -53,6 +51,7 @@ import {
 import { CupControl } from "./CupControl";
 import { appBuild } from "./build";
 import { AccountPanel } from "./AccountPanel";
+import { DataGate, type DataAccess } from "./DataGate";
 const labels = { water: "喝水", small: "嘘嘘" };
 type Tab = "today" | "history" | "review" | "me";
 type Sheet =
@@ -115,7 +114,15 @@ function BottomSheet({
     </dialog>
   );
 }
-function App() {
+function App({ access }: { access: DataAccess }) {
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const versionRef = useRef(access.initial.version);
+  const reloadEpoch = useRef(0);
+  const pendingReload = useRef(false);
+  const readFailed = useRef(Boolean(access.initial.error));
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
   const [pendingBackup, setPendingBackup] = useState<Store | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -124,6 +131,7 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const offline = useOfflineApp();
   async function refreshApp() {
+    if (savingRef.current) { setError("正在保存记录，请稍后再刷新。"); return; }
     if (!navigator.onLine) {
       setError("当前处于离线状态，请联网后再刷新应用。记录仍保存在本机。");
       return;
@@ -140,20 +148,7 @@ function App() {
     url.searchParams.set("_refresh", String(Date.now()));
     window.location.replace(url.toString());
   }
-  const [initial] = useState(() => {
-    try {
-      const state = recordRepository.load();
-      return { ...state, error: "" };
-    } catch {
-      return {
-        entries: [] as Entry[],
-        cup: newCup(),
-        goal: undefined as number | null | undefined,
-        error:
-          "本地记录暂时无法读取，原数据未被覆盖。可前往「我的」清空后重新开始。",
-      };
-    }
-  });
+  const initial = { ...access.initial.state, error: access.initial.error };
   const [cup, setCup] = useState(initial.cup);
   const [holding, setHolding] = useState(false);
   const [refillUndo, setRefillUndo] = useState<Cup | null>(null);
@@ -206,27 +201,23 @@ function App() {
       window.removeEventListener("focus", update);
     };
   }, []);
-  useEffect(() => {
-    const sync = (e: StorageEvent) => {
-      if (e.key !== STORE_KEY && e.key !== null) return;
-      try {
-        const state = recordRepository.load();
-        setEntries(state.entries);
-        setCup(state.cup);
-        setNotice(null);
-        setLastDrink(null);
-        setRefillUndo(null);
-        setGoal(state.goal === undefined ? 2000 : state.goal);
-        setBlocked(false);
-        setError("");
-      } catch {
-        setBlocked(true);
-        setError("本地数据无法读取，请前往「我的」处理。");
-      }
-    };
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
-  }, []);
+  async function reloadData(preserveError = false) {
+    if (savingRef.current) { pendingReload.current = true; return; }
+    const epoch = ++reloadEpoch.current;
+    try {
+      const snapshot = await access.session.read();
+      if (!alive.current || epoch !== reloadEpoch.current || savingRef.current) return;
+      if (snapshot.version === versionRef.current && !snapshot.error && !readFailed.current) return;
+      versionRef.current = snapshot.version;
+      setEntries(snapshot.state.entries); setCup(snapshot.state.cup);
+      setGoal(snapshot.state.goal === undefined ? 2000 : snapshot.state.goal);
+      setBlocked(Boolean(snapshot.error));
+      readFailed.current = Boolean(snapshot.error);
+      if (snapshot.error || !preserveError) setError(snapshot.error);
+      setNotice(null); setLastDrink(null); setRefillUndo(null);
+    } catch { if (alive.current) { readFailed.current = true; setBlocked(true); setError("本机数据无法读取，请重新打开后重试。"); } }
+  }
+  useEffect(() => access.subscribe(() => void reloadData()), [access.session, access.subscribe]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(null), 6000);
@@ -239,30 +230,45 @@ function App() {
     window.scrollTo({ top: 0 });
     if (next === "history") setSelectedDate(new Date());
   }
-  function persist(
+  async function persist(
     next: Entry[],
     text: string,
     undo?: string,
     nextCup: Cup = cup,
     nextGoal: number | null = goal,
   ) {
+    if (savingRef.current) return false;
+    savingRef.current = true; setSaving(true); reloadEpoch.current++;
+    let failed = false;
     try {
-      recordRepository.save({ entries: next, cup: nextCup, goal: nextGoal });
+      const saved = await access.session.save({ entries: next, cup: nextCup, goal: nextGoal }, versionRef.current);
+      if (!alive.current) return false;
+      versionRef.current = saved.version;
+      access.changed();
       setLastDrink(null);
       setRefillUndo(null);
       setCup(nextCup);
       setGoal(nextGoal);
       setEntries(next);
       setBlocked(false);
+      readFailed.current = false;
       setError("");
       setNotice({ text, undo });
       return true;
-    } catch {
-      setError("保存失败，本次操作未保存。请检查浏览器存储后重试。");
+    } catch (cause) {
+      failed = true;
+      if (alive.current) setError(`本次操作未保存。${cause instanceof Error ? cause.message : "请检查浏览器存储后重试。"}`);
+      pendingReload.current = true;
       return false;
+    } finally {
+      savingRef.current = false;
+      if (alive.current) {
+        setSaving(false);
+        if (pendingReload.current) { pendingReload.current = false; void reloadData(failed); }
+      }
     }
   }
-  function add(kind: "small") {
+  async function add(kind: "small") {
     if (blocked) return;
     const entry: Entry = {
       id: crypto.randomUUID(),
@@ -270,31 +276,31 @@ function App() {
       amount: 1,
       at: new Date().toISOString(),
     };
-    if (persist([entry, ...entries], "已记录嘘嘘 1 次", entry.id))
+    if (await persist([entry, ...entries], "已记录嘘嘘 1 次", entry.id))
       setSheet(null);
   }
   const state: Store = { entries, cup };
   const progress = cupProgress(state, now);
 
-  function commitProgress(value: number) {
+  async function commitProgress(value: number) {
     if (blocked) return;
     const date = new Date();
     setNow(date);
     if (value === cupProgress(state, date)) return;
     const next = updateProgress(state, value, date);
-    if (persist(next.entries, `本杯已喝 ${value} ml`, undefined, next.cup)) {
+    if (await persist(next.entries, `本杯已喝 ${value} ml`, undefined, next.cup)) {
       setLastDrink(next.entries[0]?.id ?? null);
       setNotice(null);
     }
   }
-  function saveCapacity() {
+  async function saveCapacity() {
     if (!validAmount(Number(amount))) {
       setError("请输入 1–5000 ml 的整数容量。");
       return;
     }
     const nextCup =
       Number(amount) === cup.capacity ? cup : newCup(Number(amount));
-    if (persist(entries, "杯子容量已保存", undefined, nextCup)) setSheet(null);
+    if (await persist(entries, "杯子容量已保存", undefined, nextCup)) setSheet(null);
   }
   function open(next: Sheet) {
     if (next === "water") setAmount(String(cup.capacity));
@@ -306,9 +312,9 @@ function App() {
     setNotice(null);
     setSheet(next);
   }
-  function remove(entry: Entry) {
+  async function remove(entry: Entry) {
     if (
-      persist(
+      await persist(
         entries.filter((e) => e.id !== entry.id),
         "记录已删除",
       )
@@ -331,10 +337,10 @@ function App() {
     setEditing(entry);
     open("edit");
   }
-  function saveEdit(input: Parameters<typeof upsertRecord>[1]) {
+  async function saveEdit(input: Parameters<typeof upsertRecord>[1]) {
     try {
       const next = upsertRecord(state, input);
-      if (persist(next, editing ? "记录已修改" : "补记已保存")) setSheet(null);
+      if (await persist(next, editing ? "记录已修改" : "补记已保存")) setSheet(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "记录无法保存。");
     }
@@ -439,7 +445,7 @@ function App() {
       <span>{notice.text}</span>
       {notice.restore && (
         <button
-          onClick={() => {
+          onClick={async () => {
             const currentIds = new Set(entries.map((e) => e.id));
             const next = [
               ...notice.restore!.filter((e) => !currentIds.has(e.id)),
@@ -447,7 +453,7 @@ function App() {
             ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
             try {
               readStore(JSON.stringify({ entries: next, cup, goal }), null);
-              persist(next, "记录已恢复");
+              await persist(next, "记录已恢复");
             } catch {
               setError("当前杯子状态已变化，无法直接撤销。可通过补记恢复。");
             }
@@ -458,9 +464,9 @@ function App() {
       )}
       {notice.undo && (
         <button
-          onClick={() => {
+          onClick={async () => {
             if (
-              persist(
+              await persist(
                 entries.filter((e) => e.id !== notice.undo),
                 "已撤销记录",
               )
@@ -481,7 +487,7 @@ function App() {
           大水之王
         </span>
         <span className="device-badge">
-          <span /> 本机记录
+          <span /> {access.session.owner === "local" ? "本机记录" : "私人记录"}
         </span>
       </header>
       <main>
@@ -489,7 +495,7 @@ function App() {
           <div className="update-banner">
             <span>新版本已准备好</span>
             <button
-              disabled={holding || refreshing}
+              disabled={holding || refreshing || saving}
               onClick={() => void refreshApp()}
             >
               更新应用
@@ -540,16 +546,16 @@ function App() {
               <div className="cup-undo-row">
                 <button
                   className="undo-sip"
-                  disabled={blocked || holding || (!lastDrink && !refillUndo)}
+                  disabled={blocked || saving || holding || (!lastDrink && !refillUndo)}
                   style={{
                     visibility: lastDrink || refillUndo ? "visible" : "hidden",
                   }}
-                  onClick={() => {
+                  onClick={async () => {
                     const nextEntries = refillUndo
                       ? entries
                       : entries.filter((e) => e.id !== lastDrink);
                     if (
-                      persist(
+                      await persist(
                         nextEntries,
                         "已撤销",
                         undefined,
@@ -566,14 +572,14 @@ function App() {
                 key={`${cup.id}:${cup.capacity}:${progress}`}
                 capacity={cup.capacity}
                 progress={progress}
-                disabled={blocked}
+                disabled={blocked || saving}
                 onCommit={commitProgress}
                 onHolding={setHolding}
               />
               <div className="cup-actions">
                 <button
                   className="sip-button"
-                  disabled={blocked || holding || progress === cup.capacity}
+                  disabled={blocked || saving || holding || progress === cup.capacity}
                   onClick={() =>
                     commitProgress(Math.min(cup.capacity, progress + 10))
                   }
@@ -588,11 +594,11 @@ function App() {
                 </button>
                 <button
                   className="refill"
-                  disabled={blocked || holding || progress === 0}
-                  onClick={() => {
+                  disabled={blocked || saving || holding || progress === 0}
+                  onClick={async () => {
                     const previous = cup;
                     if (
-                      persist(
+                      await persist(
                         entries,
                         "水已加满",
                         undefined,
@@ -612,7 +618,7 @@ function App() {
             <div className="body-stats">
               <button
                 onClick={() => add("small")}
-                disabled={blocked || holding}
+                disabled={blocked || saving || holding}
               >
                 <span className="record-icon small">
                   <Waves />
@@ -649,7 +655,7 @@ function App() {
               <p>一点一滴，都记得</p>
               <div className="history-heading">
                 <h1>记录</h1>
-                <button disabled={blocked} onClick={() => editEntry(null)}>
+                <button disabled={blocked || saving} onClick={() => editEntry(null)}>
                   <Plus size={18} />
                   补记
                 </button>
@@ -818,19 +824,19 @@ function App() {
                 </span>
               </div>
             </section>
-            <AccountPanel />
+            <AccountPanel access={access} />
             <section className="settings">
               <div>
                 <ShieldCheck />
                 <span>
-                  <strong>数据留在你的设备</strong>
-                  <small>饮水与嘘嘘记录尚未上传</small>
+                  <strong>{access.session.owner === "local" ? "数据留在你的设备" : "私人数据云同步"}</strong>
+                  <small>{access.session.owner === "local" ? "饮水与嘘嘘记录尚未上传" : "仅本人可访问，杯子按设备独立"}</small>
                 </span>
               </div>
               <button
                 className="preference"
                 onClick={() => open("water")}
-                disabled={blocked}
+                disabled={blocked || saving}
               >
                 <GlassWater />
                 <span>
@@ -842,7 +848,7 @@ function App() {
               <button
                 className="preference"
                 onClick={() => open("goal")}
-                disabled={blocked}
+                disabled={blocked || saving}
               >
                 <Droplet />
                 <span>
@@ -856,7 +862,7 @@ function App() {
               <button
                 className="refresh-app"
                 onClick={refreshApp}
-                disabled={refreshing}
+                disabled={refreshing || saving}
               >
                 <RefreshCw className={refreshing ? "refresh-spinning" : ""} />
                 <span>
@@ -867,7 +873,7 @@ function App() {
               </button>
               <button
                 className="preference"
-                disabled={blocked}
+                disabled={blocked || saving}
                 onClick={exportData}
               >
                 <Download />
@@ -981,20 +987,20 @@ function App() {
               <p className="sheet-description">
                 备份包含 {pendingBackup.entries.length} 条记录，杯子容量{" "}
                 {pendingBackup.cup.capacity}{" "}
-                ml。导入将替换本机的全部记录和设置。
+                ml。{access.session.owner === "local" ? "导入将替换本机的全部记录和设置。" : "导入将替换当前账号的记录和设置；新增、修改和删除也会同步到云端。原单机数据不受影响。"}
               </p>
               <button
                 className="secondary"
-                disabled={blocked}
+                disabled={blocked || saving}
                 onClick={exportData}
               >
                 先导出当前数据
               </button>
               <button
                 className="primary import-confirm"
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    persist(
+                    await persist(
                       pendingBackup.entries,
                       "备份已恢复",
                       undefined,
@@ -1024,14 +1030,14 @@ function App() {
             </>
           ) : sheet === "import" ? null : sheet === "goal" ? (
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!goalOff && !validGoal(Number(goalDraft))) {
                   setError("请输入 100–10,000 ml 的整数目标。");
                   return;
                 }
                 if (
-                  persist(
+                  await persist(
                     entries,
                     "饮水目标已保存",
                     undefined,
@@ -1082,7 +1088,7 @@ function App() {
                 />
                 不显示目标，轻松记录
               </label>
-              <button className="primary" disabled={blocked}>
+              <button className="primary" disabled={blocked || saving}>
                 保存目标
               </button>
             </form>
@@ -1151,7 +1157,7 @@ function App() {
                   </button>
                 ))}
               </div>
-              <button className="primary" disabled={blocked}>
+              <button className="primary" disabled={blocked || saving}>
                 <Check size={20} />
                 保存容量 {amount || "0"} ml
               </button>
@@ -1167,7 +1173,7 @@ function App() {
               </div>
               <button
                 className="primary"
-                disabled={blocked}
+                disabled={blocked || saving}
                 onClick={() => add(sheet)}
               >
                 <Check size={20} />
@@ -1178,14 +1184,15 @@ function App() {
             <>
               <p className="sheet-description">
                 所有饮水和如厕记录都会被永久删除，无法恢复。
+                {access.session.owner !== "local" && "当前账号的删除也会同步到云端；原单机数据不受影响。"}
               </p>
               <button
                 className="danger"
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    persist(
+                    await persist(
                       [],
-                      "本地记录已清空",
+                      "当前记录已清空",
                       undefined,
                       newCup(cup.capacity),
                     )
@@ -1243,14 +1250,14 @@ function App() {
                         <strong>+{entry.amount} ml</strong>
                         <button
                           aria-label={`编辑 ${entry.amount} ml 饮水明细`}
-                          disabled={blocked}
+                          disabled={blocked || saving}
                           onClick={() => editEntry(entry)}
                         >
                           <Pencil size={16} />
                         </button>
                         <button
                           aria-label={`删除 ${entry.amount} ml 饮水明细`}
-                          disabled={blocked}
+                          disabled={blocked || saving}
                           onClick={() => remove(entry)}
                         >
                           <Trash2 size={17} />
@@ -1260,8 +1267,8 @@ function App() {
                   </div>
                   <button
                     className="delete-record"
-                    disabled={blocked || sheet.members.length === 0}
-                    onClick={() => {
+                    disabled={blocked || saving || sheet.members.length === 0}
+                    onClick={async () => {
                       if (
                         window.confirm(
                           "删除这杯水的全部饮水记录？今日累计也会同步减少。",
@@ -1269,7 +1276,7 @@ function App() {
                       ) {
                         const ids = new Set(sheet.members.map((e) => e.id));
                         if (
-                          persist(
+                          await persist(
                             entries.filter((e) => !ids.has(e.id)),
                             "这杯水的记录已删除",
                           )
@@ -1291,7 +1298,7 @@ function App() {
                 <>
                   <button
                     className="secondary"
-                    disabled={blocked}
+                    disabled={blocked || saving}
                     onClick={() => editEntry(sheet)}
                   >
                     <Pencil size={17} />
@@ -1299,7 +1306,7 @@ function App() {
                   </button>
                   <button
                     className="delete-record"
-                    disabled={blocked}
+                    disabled={blocked || saving}
                     onClick={() => remove(sheet)}
                   >
                     <Trash2 size={18} />
@@ -1314,4 +1321,6 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <DataGate>{(access) => <App key={access.session.owner} access={access} />}</DataGate>,
+);

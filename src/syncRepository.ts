@@ -1,5 +1,14 @@
 import { readStore, type Store } from "./records.ts";
-import { parsePage, type ChangePage } from "./syncProtocol.ts";
+import { parsePage, validCursor, type ChangePage, type RemoteChange } from "./syncProtocol.ts";
+
+export function stateVersion(state: Store) {
+  return JSON.stringify({ entries: state.entries.map(recordValue),
+    cup: { id: state.cup.id, capacity: state.cup.capacity, day: state.cup.day }, goal: state.goal === undefined ? 2000 : state.goal });
+}
+function recordValue(record: Store["entries"][number]) {
+  return { id: record.id, kind: record.kind, amount: record.amount, at: record.at,
+    ...(record.cupId === undefined ? {} : { cupId: record.cupId }) };
+}
 
 export type Mutation = {
   owner: string;
@@ -33,11 +42,12 @@ function completion(tx: IDBTransaction): Promise<void> {
 function entities(state: Store, deviceId: string) {
   const values = new Map<string, { entity: Mutation["entity"]; entityId: string; value: unknown }>();
   for (const record of state.entries)
-    values.set(`record:${record.id}`, { entity: "record", entityId: record.id, value: record });
+    values.set(`record:${record.id}`, { entity: "record", entityId: record.id, value: recordValue(record) });
   values.set("settings:settings", {
     entity: "settings", entityId: "settings", value: { goal: state.goal === undefined ? 2000 : state.goal },
   });
-  values.set(`cup:${deviceId}`, { entity: "cup", entityId: deviceId, value: state.cup });
+  values.set(`cup:${deviceId}`, { entity: "cup", entityId: deviceId,
+    value: { id: state.cup.id, capacity: state.cup.capacity, day: state.cup.day } });
   return values;
 }
 
@@ -72,6 +82,21 @@ export class SyncRepository {
 
   close() { this.db.close(); }
 
+  /** Device-local view preference, never an authentication credential. */
+  async lastOwner(): Promise<string | null> {
+    const tx = this.db.transaction("metadata", "readonly");
+    const done = completion(tx);
+    const owner = await request(tx.objectStore("metadata").get("activeOwner"));
+    await done;
+    return typeof owner === "string" && owner !== "local" ? owner : null;
+  }
+  async rememberOwner(owner: string) {
+    const tx = this.db.transaction("metadata", "readwrite");
+    const done = completion(tx);
+    tx.objectStore("metadata").put(owner,"activeOwner");
+    await done;
+  }
+
   async load(owner: string): Promise<{ state: Store; cursor: string | null } | null> {
     const tx = this.db.transaction("snapshots", "readonly");
     const done = completion(tx);
@@ -81,7 +106,7 @@ export class SyncRepository {
   }
 
   /** Caller must have shown import scope and obtained consent before first account save. */
-  async save(owner: string, state: Store): Promise<void> {
+  async save(owner: string, state: Store, expectedVersion?: string): Promise<void> {
     if (!owner) throw Error("缺少数据归属");
     const validated = readStore(JSON.stringify(state), null);
     const tx = this.db.transaction(["snapshots", "outbox"], "readwrite");
@@ -89,6 +114,8 @@ export class SyncRepository {
     try {
       const snapshots = tx.objectStore("snapshots");
       const previous = await request(snapshots.get(owner)) as Snapshot | undefined;
+      if (expectedVersion !== undefined && (!previous || stateVersion(previous.state) !== expectedVersion))
+        throw Error("记录已在其他页面更新，请重试");
       const before = previous ? entities(previous.state, this.deviceId) : new Map();
       const after = entities(validated, this.deviceId);
       const revisions = { ...previous?.revisions };
@@ -117,6 +144,63 @@ export class SyncRepository {
       await done.catch(() => {});
       throw error;
     }
+    await done;
+  }
+
+  /** One-time, consented bootstrap; no partial account snapshot survives a failure. */
+  async initializeAccount(owner: string, base: Store, changes: RemoteChange[], cursor: string, imported: Store | null) {
+    if (!owner || owner === "local" || !validCursor(cursor)) throw Error("首次同步参数异常");
+    const records = new Map<string, Store["entries"][number]>();
+    const revisions: Record<string, number> = {};
+    const deleted = new Set<string>();
+    let cup = base.cup;
+    let goal = base.goal;
+    let hasGoal = false;
+    // The caller supplies validated pages in cursor order, including later edits.
+    for (const change of changes) {
+      const key = `${change.entity}:${change.entityId}`;
+      if (change.entity === "record") {
+        if (change.value === null) { records.delete(change.entityId); deleted.add(change.entityId); }
+        else { records.set(change.entityId, change.value as Store["entries"][number]); deleted.delete(change.entityId); }
+      } else if (change.entity === "settings") { goal = (change.value as { goal: number | null }).goal; hasGoal = true; }
+      else if (change.entityId === this.deviceId) cup = change.value as Store["cup"];
+      else continue;
+      revisions[key] = change.revision;
+    }
+    const remote: Store = { entries: [...records.values()], cup, ...(goal !== undefined ? { goal } : {}) };
+    if (imported) {
+      for (const entry of imported.entries) {
+        if (deleted.has(entry.id)) continue;
+        const existing = records.get(entry.id);
+        if (existing && JSON.stringify(recordValue(existing)) !== JSON.stringify(recordValue(entry)))
+          throw Error("本机与云端有相同 ID 的不同记录，未覆盖任何数据。请先导出备份。");
+        records.set(entry.id, entry);
+      }
+      cup = imported.cup;
+      if (!hasGoal) goal = imported.goal;
+    }
+    const state = readStore(JSON.stringify({ entries: [...records.values()].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)), cup, goal }), null);
+    const tx = this.db.transaction(["snapshots", "outbox", "metadata"], "readwrite");
+    const done = completion(tx);
+    try {
+      const snapshots = tx.objectStore("snapshots");
+      if (await request(snapshots.get(owner))) throw Error("此账号已在其他页面接入，请重新打开");
+      const before = entities(remote, this.deviceId);
+      // Absent settings/cup are new entities even if their default values match.
+      if (!hasGoal) before.delete("settings:settings");
+      if (!revisions[`cup:${this.deviceId}`]) before.delete(`cup:${this.deviceId}`);
+      const after = entities(state, this.deviceId);
+      let sequence = 0;
+      for (const [key, next] of after) {
+        if (JSON.stringify(before.get(key)?.value) === JSON.stringify(next.value)) continue;
+        const expectedRevision = revisions[key] ?? 0;
+        tx.objectStore("outbox").add({ owner, sequence: ++sequence, mutationId: crypto.randomUUID(),
+          entity: next.entity, entityId: next.entityId, expectedRevision, value: next.value } satisfies Mutation);
+        revisions[key] = expectedRevision + 1;
+      }
+      snapshots.put({ owner, state, revisions, sequence, cursor } satisfies Snapshot);
+      tx.objectStore("metadata").put(owner,"activeOwner");
+    } catch (error) { tx.abort(); await done.catch(()=>{}); throw error; }
     await done;
   }
 

@@ -19,10 +19,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Mobile sync and offline regression
+        run: npm run test:browser
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
       - run: npm run build -- --base=/water-king/
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_CLOUD_SYNC_PREVIEW: ${{ vars.VITE_CLOUD_SYNC_PREVIEW }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

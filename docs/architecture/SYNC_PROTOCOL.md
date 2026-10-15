@@ -1,6 +1,6 @@
 # 私人同步协议（WK-03）
 
-本协议与代码、SQL 已实现并验证；尚未接入页面，不表示现有记录已上传。遵循 US-04、US-06、US-09～US-11 与 SYNC 的离线、隐私、冲突保留及设备杯子约束。
+本协议、代码和 SQL 已实现并验证；已接入默认关闭的页面预览，不表示默认上传现有记录。遵循 US-04、US-06、US-09～US-11 与 SYNC 的离线、隐私、冲突保留及设备杯子约束。首次迁移与页面验证见 [SYNC_UI.md](SYNC_UI.md)。
 
 ## 数据模型与访问
 
@@ -23,7 +23,7 @@
 - 有待上传改动的实体不被拉取覆盖；队列及预期版本保留。其他设备的杯子不改变本机杯状态。拉取使用旧 cursor 的并发任务被拒绝，不能回滚已保存游标。
 - `SyncWorker.run(owner)` 需已有经过首次数据处理确认的账号快照。它不会自行迁移 localStorage 或创建账号；本地 namespace 不允许上传。每轮最多 200 次写请求和 50 页拉取，网络错误向调用方报告，下一轮复用原 mutationId。
 - 只在匹配 mutationId 与 revision 的服务器确认后出队；任何冲突立即停止该轮，保留本地修改和整条未完成版本链，返回双方数据供未来界面展示，不自动选胜者。
-- 同账号并发启动合并成一轮；支持取消。每个请求前后检查当前账号；Transport 校验队列 owner 与当前 session，锁定该 session 的 Authorization header，防止发请求瞬间账号切换把 A 队列写入 B。单次 RPC 有 15 秒超时。
+- 同账号并发启动合并成一轮，多标签页通过 Web Lock 串行执行；支持取消。每个请求前后检查当前真实 Auth 用户；Transport 校验队列 owner 与 session，固定 Authorization header，防止切账号时把 A 队列写入 B。本机缓存的视图标记不参与服务器认证。单次 RPC 有 15 秒超时。
 - 只有无待上传队列、末页已成功落盘才返回 synced。同步中又发生本地修改则返回 pending。无后台无限心跳，不自行定义游客活跃或 30 天期限。
 
 ## 验证与部署
@@ -32,4 +32,4 @@
 
 本地测试覆盖离线发送中断重试、精确确认、冲突不出队、账号切换、取消、分页断点、拉取期间本机编辑、游标异常与本机杯隔离；Transport 使用实际 SDK 与模拟 fetch 验证固定身份 header。未宣称真实 Auth REST、多设备并发、Safari 或 iPhone 验证通过。
 
-安全 Advisor 的匿名游客策略提示符合产品规则；其余密码泄露保护关闭提示应在密码绑定阶段处理：[Supabase 密码保护](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)。性能 Advisor 无提示。仍需继续 WK-04 首次上传确认与页面数据层接入、产品确认后的冲突界面、WK-05 绑定、WK-06 30 天服务端生命周期，再验收完整同步。
+安全 Advisor 的匿名游客策略提示符合产品规则；其余密码泄露保护关闭提示应在密码绑定阶段处理：[Supabase 密码保护](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)。性能 Advisor 无提示。WK-04 页面接入已通过模拟服务验证；仍需产品确认后的冲突界面、WK-05 绑定、WK-06 30 天服务端生命周期和真实服务/设备验收，再开放正式同步。

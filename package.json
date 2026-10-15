@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:browser": "node scripts/browser-sync.mjs",
     "schema:generate": "node --experimental-strip-types scripts/render-schema.ts",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
@@ -20,6 +21,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "fake-indexeddb": "6.2.4",
+    "playwright-core": "1.61.1",
     "typescript": "~5.9.3",
     "vite": "^7.3.0"
   },
