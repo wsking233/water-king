@@ -2206,3 +2206,25 @@ body {
     transform: none;
   }
 }
+/* Account setup remains optional and does not interrupt offline recording. */
+.account-card {
+  margin: 20px 0;
+  padding: 20px;
+  border-radius: 24px;
+  background: #fff;
+}
+.account-card h2 { font-size: 18px; margin: 0 0 14px; }
+.account-card p { font-size: 13px; line-height: 1.7; color: #65727a; }
+.account-card label { font-size: 14px; }
+.account-id { overflow-wrap: anywhere; }
+.account-edit { display: flex; gap: 10px; margin-top: 8px; }
+.account-edit input {
+  min-width: 0;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #dce5ea;
+  border-radius: 12px;
+  font-size: 16px;
+}
+.account-edit button { min-width: 64px; min-height: 44px; border-radius: 12px; }
+.account-card .account-error { color: #a33f3f; }

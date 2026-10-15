@@ -1,6 +1,6 @@
 # 大水之王 · Water King
 
-面向手机触摸操作的饮水与嘘嘘记录应用。纯前端单机使用，无需账号，不上传个人记录。
+面向手机触摸操作的饮水与嘘嘘记录应用。无需账号即可本机使用；配置 Supabase 后，「我的」可选择游客登录、自动恢复身份和修改云端昵称。饮水与嘘嘘记录尚未上传。
 
 ## 日常使用
 
@@ -12,7 +12,7 @@
 - 「回顾」展示最近 7 天的饮水量、嘘嘘次数和记录天数，点击某天查看明细。未记录不代表没有发生。
 - 「我的」支持 JSON 备份导出和恢复。恢复前校验文件并要求确认，导入会替换本机记录、杯子和目标，不会自动合并。
 
-水量只是估计，不需要精确测量；目标与回顾不用于医疗判断。未加入提醒、账号、云同步或联网排行榜。
+水量只是估计，不需要精确测量；目标与回顾不用于医疗判断。未加入提醒、记录云同步或联网排行榜。邮箱绑定、密码登录及 30 天游客清理尚未实现。
 
 ## 数据与离线
 
@@ -34,6 +34,12 @@ npm run build
 npm run preview
 ```
 
+账号配置：复制 `.env.example` 为 `.env.local`，填写 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_PUBLISHABLE_KEY`。仅接受 `sb_publishable_…` 公钥，禁止放入 secret/service_role 密钥。未配置时保留完整本机体验。GitHub Pages 构建从同名 GitHub Actions **Variables** 读取这两个值；仅配置 Supabase 控制台不会自动设置 GitHub 构建变量。
+
+云端模型在 `src/cloud/models.ts`。`npm run schema:generate` 从已部署的 profile 模型生成 `supabase/schema.sql`，经授权的 Supabase 部署工具执行；浏览器不持有建表权限，TypeScript 类型声明本身不会建表。本阶段只部署 `profiles` 表，记录、设置和设备杯模型是后续同步接口约定，尚未部署。`supabase/profile-rls.test.sql` 可在事务中验证双用户隔离、归属不可转移及未登录拒绝访问，并回滚全部测试数据。
+
+当前账号能力对应 WK-02 基础部分：游客主动登录，不会因断网反复创建账号；会话凭证由 Supabase SDK 单独持久化，不进入 JSON 备份。昵称只展示给自己。清除网站数据或更换设备不能找回未绑定游客。**尚未实现记录上传、跨设备恢复、账号切换、绑定、过期处理**，因此不能将此阶段视为完整云同步版本。
+
 使用 Pages 路径验证正式构建：
 
 ```sh
@@ -49,6 +55,8 @@ Vite + React + TypeScript + CSS。前端状态与业务函数在同一项目中�
 - `src/CupControl.tsx`、`src/cupMotion.ts`：可取消的长按交互与水位变化。
 - `src/EntryEditor.tsx`、`src/dataTools.ts`：补记编辑、备份校验与 7 天汇总。
 - `src/records.ts`：本地数据校验、按日统计与按杯汇总。
+- `src/repository.ts`：兼容旧存储的本地事务接口，校验后单次写入；写入失败保留原快照。
+- `src/AccountPanel.tsx`、`src/cloud/`：可选游客身份、昵称、公开配置与云模型。
 - `src/offline.ts`、`vite.config.js`：离线注册、主动更新、构建时生成静态资源缓存清单。
 - `public/`：主屏幕图标和 Web App manifest。
 
@@ -69,4 +77,4 @@ Vite + React + TypeScript + CSS。前端状态与业务函数在同一项目中�
 - [协作指南](agent.md)：多人、多 Agent 的任务边界、文件协调、数据约定与交接流程。
 - [Agent 入口](AGENTS.md)：仓库的简要工作约定。
 
-路线图是后续规划，当前仍为单机应用。
+路线图是后续规划，当前记录仍保存在本机，账号基础与记录同步分阶段验收。

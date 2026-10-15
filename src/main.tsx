@@ -22,7 +22,6 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import {
-  KEY,
   STORE_KEY,
   readStore,
   newCup,
@@ -52,6 +51,8 @@ import {
 } from "./dataTools";
 import { CupControl } from "./CupControl";
 import { appBuild } from "./build";
+import { createLocalRepository } from "./repository";
+import { AccountPanel } from "./AccountPanel";
 const labels = { water: "喝水", small: "嘘嘘" };
 type Tab = "today" | "history" | "review" | "me";
 type Sheet =
@@ -115,6 +116,11 @@ function BottomSheet({
   );
 }
 function App() {
+  // Access browser storage lazily so unavailable storage reaches the error UI.
+  const [repository] = useState(() => createLocalRepository({
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+  }));
   const [pendingBackup, setPendingBackup] = useState<Store | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -141,10 +147,7 @@ function App() {
   }
   const [initial] = useState(() => {
     try {
-      const state = readStore(
-        localStorage.getItem(STORE_KEY),
-        localStorage.getItem(KEY),
-      );
+      const state = repository.read();
       return { ...state, error: "" };
     } catch {
       return {
@@ -212,10 +215,7 @@ function App() {
     const sync = (e: StorageEvent) => {
       if (e.key !== STORE_KEY && e.key !== null) return;
       try {
-        const state = readStore(
-          localStorage.getItem(STORE_KEY),
-          localStorage.getItem(KEY),
-        );
+        const state = repository.read();
         setEntries(state.entries);
         setCup(state.cup);
         setNotice(null);
@@ -252,10 +252,7 @@ function App() {
     nextGoal: number | null = goal,
   ) {
     try {
-      localStorage.setItem(
-        STORE_KEY,
-        JSON.stringify({ entries: next, cup: nextCup, goal: nextGoal }),
-      );
+      repository.save({ entries: next, cup: nextCup, goal: nextGoal });
       setLastDrink(null);
       setRefillUndo(null);
       setCup(nextCup);
@@ -826,12 +823,13 @@ function App() {
                 </span>
               </div>
             </section>
+            <AccountPanel />
             <section className="settings">
               <div>
                 <ShieldCheck />
                 <span>
                   <strong>数据留在你的设备</strong>
-                  <small>无需登录，不上传个人记录</small>
+                  <small>饮水与嘘嘘记录尚未上传</small>
                 </span>
               </div>
               <button

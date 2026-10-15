@@ -1,6 +1,6 @@
 # V0.2 用户与云同步架构及开发任务
 
-状态：架构设计基线，未实现。更新：2026-10-16。产品已确认规则见 `docs/product/USER_SYSTEM.md`；已实现能力以根目录 README 为准。
+状态：WK-01 本地事务接口已实现；WK-02 账号基础已编码、数据库隔离已验证，真实 Auth 链路待验证；WK-03～06 尚未实现。产品已确认规则见 `docs/product/USER_SYSTEM.md`；已实现能力以根目录 README 为准。
 
 ## 目标与边界
 
@@ -8,7 +8,7 @@
 - 所有私人饮水/嘘嘘记录、每日目标及用户偏好同步至云端；上传不等于公开，默认仅拥有者可读写。
 - 每台设备保有独立杯子运行状态（当前杯 ID、水位及设备专属杯容量）；全账号汇总历史饮水事件，绝不把另一设备水位直接套用到本机。
 - 维持 React + TypeScript + Vite + GitHub Pages、离线可记录与 JSON 导入导出，迁移前不删除 localStorage。
-- Supabase (PostgreSQL / Auth / RLS) 为优先评估方案；用户尚需创建项目并配置客户端公钥与 URL。不可在仓库写入 service_role / secret key。不要把供应商选择误当成已经连通的事实。
+- Supabase 项目 `water-king` 已创建；产品负责人已完成 Provider、URL Configuration 和 Publishable Key 确认。本次通过 Supabase 工具验证空库并部署私有 profiles 模型；本地公钥配置在不入库的 `.env.local`，Pages 构建仍需同名 Actions Variables。不可在仓库写入 service_role / secret key。
 
 ## 组件与数据边界
 
@@ -53,6 +53,15 @@ React 页面
 
 ### WK-02 Supabase 身份与数据库
 等用户创建 Supabase 项目后，用迁移文件建立最小表及严格 RLS；匿名游客注册、恢复、昵称和会话隔离。禁用公开读写；使用不同用户实测越权。**完成标准**：两个游客互不可读写，刷新后能恢复原游客，无后端密钥暴露。
+
+本次进度（2026-10-15）：
+
+- WK-01：`RecordRepository` 统一读写现有完整 Store（记录、设置、设备杯），沿用 localStorage 单快照事务；旧 v1/v2、存储失败及非法替换测试通过。IndexedDB 与待同步队列留在 WK-03，不提前改变存储来源。
+- WK-02：主动游客登录、SDK 会话恢复、跨标签页创建互斥、云端昵称和失败提示已编码。尚未开放账号切换，不会自动关联或上传本机记录。
+- 数据模型：`src/cloud/models.ts` 是模型入口，生成 `supabase/schema.sql` 后由已授权的 Supabase 部署工具建表。原生 Supabase 不会因前端类型自动建表，浏览器也不应持有 DDL 凭据。只部署 profiles；其余同步模型暂为接口。
+- 数据库验证：事务内模拟两个 authenticated 身份，自己的昵称可读写，他人信息不可见、不可改、不可冒充插入，user_id 不可转移，anon 无权读取。测试最终 rollback；不留下虚拟账号。安全 Advisor 唯一提示为允许匿名游客访问自己的 profile，符合 US-01/04，非公开 anon 访问。
+- 本地验证：单元测试、TypeScript 和 Pages base 构建通过；Chromium 320px 模拟器验证保存、登录网络失败不改记录、首次离线缓存及断网重开记录。真实 iPhone、真实匿名登录/会话恢复、发布后更新保留数据待验证。执行环境 HTTP 策略拒绝项目 Auth 域名，不能据此宣称端到端认证已通过。
+- 尚未完成 WK-02 全部验收，更不代表 WK-03～06 完成；30 天游客过期清理必须在完整云同步版本发布前补齐。
 
 ### WK-03 同步队列
 IndexedDB 本地事务、待同步队列、幂等 RPC / 服务端冲突检测、增量拉取、删除墓碑和游标；不强制用户联网才能操作。**完成标准**：断网新增/编辑/删除、断点续传与重复发送不重复入库；冲突不丢数据。
