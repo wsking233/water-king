@@ -172,3 +172,26 @@ test("grouping does not merge different cups, legacy entries, or different dates
   assert.equal(groupRecords(input).length, 5);
   assert.equal(groupRecords([]).length, 0);
 });
+
+import { validGoal } from "../src/records.ts";
+import { heldProgress } from "../src/cupMotion.ts";
+test("hold ignores taps, decreases gradually and caps at capacity", () => {
+  assert.equal(heldProgress(10, 250, 200), 10);
+  assert.equal(heldProgress(0, 250, 900), 25);
+  assert.equal(heldProgress(245, 250, 1500), 250);
+  assert.equal(heldProgress(0, 1, 5850), 1);
+  assert.equal(heldProgress(250, 250, 10000), 250);
+});
+test("goal is optional in existing storage and persisted in new storage", () => {
+  const s = empty();
+  assert.deepEqual(readStore(JSON.stringify(s), null), s);
+  for (const goal of [null, 1500, 2400])
+    assert.deepEqual(readStore(JSON.stringify({ ...s, goal }), null), {
+      ...s,
+      goal,
+    });
+  for (const goal of [0, -1, 10001, 1.5, "2000"])
+    assert.throws(() => readStore(JSON.stringify({ ...s, goal }), null));
+  assert.equal(validGoal(2000), true);
+  assert.equal(validGoal(0), false);
+});

@@ -47,7 +47,10 @@ export function parseEntries(raw: string | null): Entry[] {
 }
 
 export type Cup = { id: string; capacity: number; day: string };
-export type Store = { entries: Entry[]; cup: Cup };
+export type Store = { entries: Entry[]; cup: Cup; goal?: number | null };
+export function validGoal(value: number) {
+  return Number.isInteger(value) && value >= 100 && value <= 10000;
+}
 export const STORE_KEY = "water-king.state.v2";
 export function newCup(capacity = 250, now = new Date()): Cup {
   return { id: crypto.randomUUID(), capacity, day: dayKey(now) };
@@ -76,7 +79,13 @@ export function readStore(raw: string | null, legacy: string | null): Store {
       .reduce((n, e) => n + e.amount, 0) > state.cup.capacity
   )
     throw Error("杯子进度异常");
-  return { entries, cup: state.cup };
+  if (state.goal !== undefined && state.goal !== null && !validGoal(state.goal))
+    throw Error("目标数据异常");
+  return {
+    entries,
+    cup: state.cup,
+    ...(state.goal !== undefined ? { goal: state.goal } : {}),
+  };
 }
 export function updateProgress(
   state: Store,
