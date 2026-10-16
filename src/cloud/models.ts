@@ -53,6 +53,7 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      account_status: { Args: { [_ in never]: never }; Returns: Json };
       sync_apply: {
         Args: { p_mutation_id: string; p_entity: string; p_entity_id: string; p_expected_revision: number; p_value: Json };
         Returns: Json;

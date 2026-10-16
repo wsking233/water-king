@@ -7,8 +7,9 @@ import { SyncRepository } from "./syncRepository";
 import { SyncWorker, type SyncResult } from "./syncWorker";
 import { parsePage, type RemoteChange } from "./syncProtocol";
 import { newCup } from "./records";
+import { guestExpiryMessage, shouldRestoreIdentity } from "./cloud/lifecycle";
 
-export type SyncView = { status: "local" | "pending" | "syncing" | "synced" | "conflict" | "error"; message: string };
+export type SyncView = { status: "local" | "pending" | "syncing" | "synced" | "conflict" | "expired" | "error"; message: string };
 export type DataAccess = {
   syncEnabled: boolean;
   session: DataSession;
@@ -52,7 +53,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   const synchronize = useCallback(async () => {
     const current = selectedRef.current;
     if (!cloudSyncEnabled || !current || current.session.owner === "local" || !worker.current) return;
-    if (syncRef.current.status === "conflict") return;
+    if (syncRef.current.status === "conflict" || syncRef.current.status === "expired") return;
     const account = current.session.owner;
     const startedAt = writeEpoch.current;
     if (owner.current !== account || !navigator.onLine) {
@@ -62,25 +63,28 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
     }
     setSync({ status: "syncing", message: "正在同步…本机仍可记录" });
     try {
+      await createSyncTransport(setup.client!).status(account,new AbortController().signal);
+      if(selectedRef.current?.session!==current.session || owner.current!==account) return;
       const result: SyncResult = await worker.current.run(account);
       if (selectedRef.current?.session !== current.session || owner.current !== account) return;
       if (result.status === "conflict") setSync({ status: "conflict", message: "发现不同版本，已暂停同步并保留本机改动。可先导出备份；不会自动覆盖任何一方。" });
       else if (result.status === "synced" && startedAt === writeEpoch.current) setSync({ status: "synced", message: "记录已同步" });
       else setSync({ status: "pending", message: "本机仍有待同步记录，可再次同步" });
-    } catch {
+    } catch (cause) {
       if (selectedRef.current?.session === current.session)
-        setSync({ status: "error", message: "同步未完成，本机改动已保留。请联网后重试。" });
+        setSync(guestExpiryMessage(cause) ? {status:"expired",message:guestExpiryMessage(cause)!}
+          : { status: "error", message: "同步未完成，本机改动已保留。请联网后重试。" });
     } finally {
       if (selectedRef.current?.session === current.session) { notify(); publish("sync"); }
     }
-  }, [notify, publish]);
+  }, [notify, publish, setup]);
   const synchronizeRef = useRef(synchronize);
   synchronizeRef.current = synchronize;
   const changed = useCallback(() => {
     writeEpoch.current++;
     publish();
     if (cloudSyncEnabled && selectedRef.current?.session.owner !== "local") {
-      if (syncRef.current.status === "conflict") return;
+      if (syncRef.current.status === "conflict" || syncRef.current.status === "expired") return;
       setSync({ status: "pending", message: "记录已保存在本机，等待同步" });
       clearTimeout(timer.current);
       timer.current = setTimeout(() => void synchronizeRef.current(), 600);
@@ -98,7 +102,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
         if (event.data?.owner === selectedRef.current?.session.owner) {
           if (event.data?.kind === "write" && selectedRef.current?.session.owner !== "local") {
             writeEpoch.current++;
-            if (syncRef.current.status !== "conflict")
+            if (syncRef.current.status !== "conflict" && syncRef.current.status !== "expired")
               setSync({ status: "pending", message: "其他页面的数据已更新，可同步查看最新状态" });
           }
           notify();
@@ -120,7 +124,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
         if (disposed || epoch !== generation.current) return;
         if (selectedRef.current?.session.owner === target) {
           if (cached && target !== "local") setSync({ status: "pending", message: "身份尚未恢复，记录仅保存在本机。请先导出备份，再登录或创建新游客。" });
-          if (!cached && target !== "local" && syncRef.current.status !== "conflict") {
+          if (!cached && target !== "local" && syncRef.current.status !== "conflict" && syncRef.current.status !== "expired") {
             setSync({ status: "pending", message: cloudSyncEnabled ? "身份已恢复，等待同步" : "账号记录已在本机恢复，云同步暂未开放" });
             if (navigator.onLine && !document.hidden) void synchronizeRef.current();
           }
@@ -160,7 +164,10 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
       const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
         sawAuthEvent = true;
         const next = session?.user.id ?? null;
+        const previous=owner.current;
         owner.current = next;
+        // Token refresh alone is not user activity and must not renew a guest.
+        if(!shouldRestoreIdentity(previous,next,_event)) return;
         if (next) { offlineView.current = null; void select(next); }
         else { worker.current?.cancel(); void recoverCached(); }
       });
@@ -209,6 +216,8 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
     const changes: RemoteChange[] = [];
     let cursor = "0";
     const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000);
+    try { await transport.status(account,signal); }
+    catch(cause) { throw new Error(guestExpiryMessage(cause) ?? "账号状态暂时无法验证，尚未切换或上传。"); }
     for (;;) {
       signal.throwIfAborted();
       if (owner.current !== account) throw Error("账号已变化，请重新确认");

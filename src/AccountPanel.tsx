@@ -5,6 +5,7 @@ import { defaultNickname, enterGuest, loadProfile } from "./cloud/identity";
 import type { DataAccess } from "./DataGate";
 import type { DataSnapshot } from "./dataSession";
 import { totals } from "./records";
+import { guestExpiryMessage } from "./cloud/lifecycle";
 
 function ConnectSheet({ preview, accountId, access, close }: { preview: DataSnapshot; accountId: string; access: DataAccess; close: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -103,16 +104,16 @@ export function AccountPanel({ access }: { access: DataAccess }) {
     if (!client || !user) return;
     let active = true;
     const id = user.id;
-    if (!online) return () => { active = false; };
+    if (!online || document.hidden) return () => { active = false; };
     loadProfile(client, user).then((profile) => {
       if (active && currentId.current === id) {
         setNickname(profile.nickname);
         setDraft(profile.nickname);
         setError("");
       }
-    }).catch(() => {
+    }).catch((cause) => {
       if (active && currentId.current === id)
-        setError("昵称暂时无法读取，可联网后重试。身份和本机记录不受影响。");
+        setError(guestExpiryMessage(cause) ?? "昵称暂时无法读取，可联网后重试。身份和本机记录不受影响。");
     });
     return () => { active = false; };
   }, [setup, user?.id, online, profileRetry]);
@@ -140,8 +141,8 @@ export function AccountPanel({ access }: { access: DataAccess }) {
       if (saveError) throw saveError;
       if (currentId.current !== id) return;
       setNickname(data.nickname); setDraft(data.nickname); setMessage("昵称已保存，用户 ID 保持不变。");
-    } catch {
-      if (currentId.current === id) setError("昵称未保存，请联网后重试。");
+    } catch (cause) {
+      if (currentId.current === id) setError(guestExpiryMessage(cause) ?? "昵称未保存，请联网后重试。");
     } finally { setBusy(false); }
   }
 
@@ -175,7 +176,7 @@ export function AccountPanel({ access }: { access: DataAccess }) {
       } catch { setError("本机数据暂时无法读取，尚未上传。"); }
     }}>设置云同步</button>}
     {access.syncEnabled && access.session.owner !== "local" && <>
-      <button className="primary" disabled={!online || access.sync.status === "syncing" || access.sync.status === "conflict"}
+      <button className="primary" disabled={!online || access.sync.status === "syncing" || access.sync.status === "conflict" || access.sync.status === "expired"}
         onClick={() => void access.synchronize()}> {access.sync.status === "syncing" ? "正在同步…" : "立即同步"}</button>
       <p>全部记录默认私有。断网时先保存到本机，联网后补传。发生冲突时暂停同步，保留本机改动。</p>
     </>}

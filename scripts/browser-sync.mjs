@@ -43,6 +43,7 @@ const handleRequest = async route => {
   if (url.pathname === '/auth/v1/signup') return json(session);
   if (url.pathname === '/auth/v1/user') return json(user);
   if (url.pathname === '/auth/v1/token') return route.abort('internetdisconnected');
+  if (url.pathname.endsWith('/account_status')) return json({is_anonymous:true,expires_at:new Date(Date.now()+720*3600000).toISOString()});
   if (url.pathname.includes('/rest/v1/profiles')) {
     const profile = {user_id:id,nickname:'测试水友',created_at:user.created_at};
     return json(req.method() === 'GET' && !req.headers().accept?.includes('vnd.pgrst.object') ? [profile] : profile);

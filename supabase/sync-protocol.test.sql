@@ -1,9 +1,9 @@
 begin;
 select set_config('waterking.test_a',gen_random_uuid()::text,true);
 select set_config('waterking.test_b',gen_random_uuid()::text,true);
-insert into auth.users(id,is_anonymous) values
-  (current_setting('waterking.test_a')::uuid,true),
-  (current_setting('waterking.test_b')::uuid,true);
+insert into auth.users(id,is_anonymous,created_at) values
+  (current_setting('waterking.test_a')::uuid,true,now()),
+  (current_setting('waterking.test_b')::uuid,true,now());
 select set_config('request.jwt.claim.sub',current_setting('waterking.test_a'),true);
 set local role authenticated;
 do $$

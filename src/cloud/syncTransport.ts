@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./models.ts";
 import type { SyncTransport } from "../syncWorker.ts";
 
-export function createSyncTransport(client: SupabaseClient<Database>): SyncTransport {
+export function createSyncTransport(client: SupabaseClient<Database>): SyncTransport & {
+  status(owner: string, signal: AbortSignal): Promise<unknown>;
+} {
   async function token(owner: string, signal: AbortSignal) {
     signal.throwIfAborted();
     const { data, error } = await client.auth.getSession();
@@ -14,6 +16,13 @@ export function createSyncTransport(client: SupabaseClient<Database>): SyncTrans
     return data.session.access_token;
   }
   return {
+    async status(owner, signal) {
+      const jwt=await token(owner,signal);
+      const {data,error}=await client.rpc("account_status",{}).setHeader("Authorization",`Bearer ${jwt}`)
+        .abortSignal(AbortSignal.any([signal,AbortSignal.timeout(15000)]));
+      if(error) throw error;
+      return data;
+    },
     async apply(owner, mutation, signal) {
       if (mutation.owner !== owner) throw Error("队列账号不匹配");
       const jwt = await token(owner, signal);
