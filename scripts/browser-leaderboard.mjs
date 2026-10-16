@@ -15,7 +15,7 @@ const user={id,aud:'authenticated',role:'authenticated',is_anonymous:true,app_me
 const b64=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
 const token=`${b64({alg:'HS256',typ:'JWT'})}.${b64({sub:id,aud:'authenticated',role:'authenticated',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+3600})}.c2lnbmF0dXJl`;
 const session={access_token:token,refresh_token:'test-refresh',token_type:'bearer',expires_in:3600,expires_at:Math.floor(Date.now()/1000)+3600,user};
-const rows=Array.from({length:41},(_,i)=>({nickname:i===0?'很长很长的昵称测试abcdefghijklmnopqrstuvwxyz':'水友 '+i,rank:i<2?1:i+1,score:i<2?500:0,empty:i>1,incomplete:false}));
+const rows=Array.from({length:41},(_,i)=>({nickname:i===0?'很长很长的昵称测试abcdefghijklmnopqrstuvwxyz':'水友 '+i,rank:i<2?1:3,score:i<2?500:0,empty:i>1,incomplete:false}));
 await context.route('https://test.supabase.co/**',async route=>{
  const req=route.request();const url=new URL(req.url());
  const json=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
@@ -23,6 +23,7 @@ await context.route('https://test.supabase.co/**',async route=>{
  if(url.pathname==='/auth/v1/user')return json(user);
  if(url.pathname.includes('/profiles')) return json({user_id:id,nickname:'测试水友',created_at:user.created_at});
  if(url.pathname.endsWith('account_status'))return json({is_anonymous:true,expires_at:new Date(Date.now()+720*3600000).toISOString()});
+ if(url.pathname.endsWith('leaderboard_preference'))return json(participating);
  if(url.pathname.endsWith('leaderboard_participation')){participating=req.postDataJSON().p_enabled;return json(participating);}
  if(url.pathname.endsWith('leaderboard_page')) {
   if(fail)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'unavailable'})});
@@ -40,6 +41,12 @@ try {
  await page.getByRole('button',{name:'再看 20 位水友'}).click();await page.locator('.leaderboard-list li').nth(39).waitFor();
  await page.getByRole('button',{name:'再看 20 位水友'}).click();await page.locator('.leaderboard-list li').nth(40).waitFor();
  assert.equal(await page.getByRole('button',{name:'再看 20 位水友'}).count(),0);
+ await page.getByRole('button',{name:'刷新排行榜'}).click();
+ await page.waitForFunction(()=>!document.querySelector('[aria-label="刷新排行榜"]')?.disabled);
+ assert.equal(await page.locator('.leaderboard-list li').count(),41);
+ await page.getByRole('tab',{name:'连续记录',exact:true}).focus();await page.keyboard.press('End');
+ assert.equal(await page.getByRole('tab',{name:'累计饮水',exact:true}).getAttribute('aria-selected'),'true');
+ await page.keyboard.press('Home');assert.equal(await page.getByRole('tab',{name:'连续记录',exact:true}).getAttribute('aria-selected'),'true');
  for(const name of ['累计记录','目标完成','今日饮水','累计饮水','连续记录']) {
   await page.getByRole('tab',{name,exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.leaderboard-list li').length===20);
  }
@@ -53,6 +60,7 @@ try {
  await context.setOffline(false);await page.waitForFunction(()=>!document.querySelector('.leaderboard-cache'));
  await page.getByRole('button',{name:'我的',exact:true}).click();await page.getByRole('heading',{name:'排行榜隐私'}).waitFor();
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ total=41;
  await page.getByRole('button',{name:'游客登录',exact:true}).click();
  const privacy=page.getByRole('switch',{name:/公开参与排行榜/});
  await page.waitForFunction(()=>document.querySelector('[role=switch]')?.getAttribute('aria-checked')==='true');
@@ -66,7 +74,7 @@ try {
  await page.waitForFunction(()=>document.querySelector('[role=switch]')?.getAttribute('aria-checked')==='true');
  assert.equal(participating,true);
  await page.getByRole('button',{name:'排行',exact:true}).click();
- await page.getByText('第 31 名 · 0 天 · 暂无记录').waitFor();
+ await page.getByText('第 3 名 · 0 天 · 暂无记录').waitFor();
  if(process.env.SCREENSHOT_PATH)await page.screenshot({path:process.env.SCREENSHOT_PATH,fullPage:true});
  assert.deepEqual(errors,[]);
  console.log('PASS mobile leaderboard: five metrics, 19/20/41 rows, stale cursor, empty, retry, offline, long nickname, privacy entry, 320px');

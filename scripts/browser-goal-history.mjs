@@ -11,7 +11,7 @@ await db.exec(`create role anon;create role authenticated;create schema auth;
 create table auth.users(id uuid primary key,is_anonymous boolean not null default false,created_at timestamptz default now(),last_sign_in_at timestamptz,email_confirmed_at timestamptz);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 grant usage on schema auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;`);
-for(const file of ['schema.sql','sync-schema.sql','lifecycle-upgrade.sql','leaderboard-record-facts.sql','leaderboard.sql'])await db.exec(await sql(file));
+for(const file of ['schema.sql','sync-schema.sql','lifecycle-upgrade.sql','leaderboard-record-facts.sql','leaderboard.sql','leaderboard-preference.sql'])await db.exec(await sql(file));
 await db.exec('begin;'+await sql('goal-history.sql')+'commit;');
 await db.exec(await sql('achievement-facts.sql'));await db.exec(await sql('achievements.sql'));
 const outDir=await mkdtemp(join(tmpdir(),'wk-goal-history-'));
@@ -47,6 +47,7 @@ async function contextFor(id){
    else if(url.pathname.endsWith('/sync_apply')){query='select public.sync_apply($1,$2,$3,$4,$5::jsonb) as result';args=[p.p_mutation_id,p.p_entity,p.p_entity_id,p.p_expected_revision,JSON.stringify(p.p_value)];}
    else if(url.pathname.endsWith('/sync_pull')){query='select public.sync_pull($1,$2) as result';args=[p.p_after,p.p_limit];}
    else if(url.pathname.endsWith('/leaderboard_page')){query='select public.leaderboard_page($1,$2,$3) as result';args=[p.p_metric,p.p_offset,p.p_snapshot];}
+   else if(url.pathname.endsWith('/leaderboard_preference'))query='select public.leaderboard_preference() as result';
    else if(url.pathname.endsWith('/leaderboard_participation')){query='select public.leaderboard_participation($1) as result';args=[p.p_enabled];}
    else throw Error(`Unexpected endpoint ${url.pathname}`);
    return json((await db.query(query,args)).rows[0].result);

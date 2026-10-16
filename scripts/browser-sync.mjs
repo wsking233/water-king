@@ -44,6 +44,7 @@ const handleRequest = async route => {
   if (url.pathname === '/auth/v1/signup') return json(session);
   if (url.pathname === '/auth/v1/user') return json(user);
   if (url.pathname === '/auth/v1/token') return route.abort('internetdisconnected');
+  if (url.pathname.endsWith('/leaderboard_preference')) return json(true);
   if (url.pathname.endsWith('/leaderboard_page')) return json({rows:[],mine:null,total:0,participating:true,snapshot:'a'.repeat(32),stale:false,hasMore:false,updatedAt:new Date().toISOString(),day:'2026-10-16',goalHistoryAvailable:false});
   if (url.pathname.endsWith('/account_status')) return json({is_anonymous:true,expires_at:new Date(Date.now()+720*3600000).toISOString()});
   if (url.pathname.includes('/rest/v1/profiles')) {

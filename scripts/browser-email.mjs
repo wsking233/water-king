@@ -31,6 +31,7 @@ try {
       logoutCalls++; assert.equal(url.searchParams.get('scope'),'local');
       return failLogout ? route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({msg:'temporary failure'})}) : ok({});
     }
+    if(url.pathname.endsWith('/leaderboard_preference')) return ok(true);
     if(url.pathname.endsWith('/leaderboard_page')) return ok({rows:[],mine:null,total:0,participating:true,snapshot:'a'.repeat(32),stale:false,hasMore:false,updatedAt:new Date().toISOString(),day:'2026-10-16',goalHistoryAvailable:false});
     if(url.pathname.endsWith('/signup')) return ok(session());
     if(url.pathname.endsWith('/user')) {

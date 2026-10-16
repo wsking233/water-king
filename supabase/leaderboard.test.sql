@@ -32,11 +32,13 @@ begin
  update waterking_private.leaderboard_daily_goals set goal_ml=null where user_id=first_user;
  if public.leaderboard_page('goals',0,null)->'mine'->>'score'<>'0' then raise exception 'Disabled goal counted'; end if;
  perform public.leaderboard_participation(false);
+ if public.leaderboard_preference() then raise exception 'Own preference false lost';end if;
  result:=public.leaderboard_page('streak',0,null);
  if (result->>'total')::int<>40 or result->'mine'<>'null'::jsonb or (result->>'participating')::boolean then raise exception 'Opt-out'; end if;
  next_page:=public.leaderboard_page('streak',20,snap);
  if not (next_page->>'stale')::boolean or next_page->'rows'<>'[]'::jsonb then raise exception 'Stale privacy cursor'; end if;
  perform public.leaderboard_participation(true);
+ if not public.leaderboard_preference() then raise exception 'Own preference true lost';end if;
  if public.leaderboard_page('total',0,null)->'mine'->>'score'<>'500' then raise exception 'Opt-in recomputation'; end if;
  -- No other user's UUID, raw details, kind or email fields are projected.
  result:=public.leaderboard_page('total',0,null);
@@ -52,7 +54,8 @@ set local role anon;
 select set_config('request.jwt.claim.sub','',true);
 do $$ begin
  if public.leaderboard_page('total',0,null)->'mine'<>'null'::jsonb then raise exception 'Anonymous mine'; end if;
- begin perform public.leaderboard_participation(false);raise exception 'Anon write';exception when insufficient_privilege then null;end;
+ begin perform public.leaderboard_participation(false);
+ if public.leaderboard_preference() then raise exception 'Own preference false lost';end if;raise exception 'Anon write';exception when insufficient_privilege then null;end;
  begin perform * from waterking_private.leaderboard_daily_goals;raise exception 'Anon raw goals';exception when insufficient_privilege then null;end;
  begin perform * from waterking_private.sync_entities;raise exception 'Anon raw records';exception when insufficient_privilege then null;end;
 end $$;
@@ -60,7 +63,8 @@ reset role;
 set local role authenticated;
 do $$ begin
  begin perform * from waterking_private.leaderboard_preferences;raise exception 'Direct preferences';exception when insufficient_privilege then null;end;
- begin perform public.leaderboard_participation(false);raise exception 'Unauthenticated preference';exception when insufficient_privilege then null;end;
+ begin perform public.leaderboard_participation(false);
+ if public.leaderboard_preference() then raise exception 'Own preference false lost';end if;raise exception 'Unauthenticated preference';exception when insufficient_privilege then null;end;
 end $$;
 reset role;
 rollback;
