@@ -143,7 +143,19 @@ try {
   await page.getByRole('button',{name:'立即同步',exact:true}).click();
   await page.getByText('记录已同步',{exact:true}).waitFor();
   assert.equal((await snapshot(page)).state.state.entries.some(e=>e.id==='cloud-existing'),false);
+  // Wait for completed installation, then navigate under the active worker.
+  // Verify activation and the shell cache explicitly before testing offline navigation.
+  await page.evaluate(async()=>{
+    const registration=await navigator.serviceWorker.getRegistration();
+    if(!registration)throw Error('No offline worker registration');
+    await navigator.serviceWorker.ready;
+    if(!registration.active)throw Error('Offline worker did not activate');
+    const cacheNames=await caches.keys();
+    if(!cacheNames.some(name=>name.startsWith('water-king-')))throw Error('Offline shell cache missing');
+  });
+  await page.reload();
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+  await page.getByText('私人记录',{exact:true}).waitFor();
   await context.setOffline(true);
   await page.reload();
   await page.getByText('私人记录',{exact:true}).waitFor();
