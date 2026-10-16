@@ -34,6 +34,15 @@ try {
     await db.exec(await sql(file));console.log(`PASS unchanged existing contract: ${file}`);
   }
   assert.deepEqual(await protocol(),before);
+  await db.exec(await sql('leaderboard-record-facts.sql'));
+  const productionFixture=(await sql('design/leaderboard-facts.test.sql'))
+    .replaceAll('draft_record_days','leaderboard_record_days')
+    .replaceAll('draft_record_scores','leaderboard_record_scores');
+  for(let round=1;round<=3;round++) await db.exec(productionFixture);
+  const after=await protocol();
+  assert.deepEqual(after.filter(x=>!x.proname.startsWith('leaderboard_')),before);
+  console.log('PASS production record facts SQL: 3 replays, existing functions unchanged');
+
   const security=(await db.query(`select bool_and(c.relrowsecurity) as rls
     from pg_class c where c.oid in ('waterking_private.goal_history_baselines_draft'::regclass,'waterking_private.goal_history_events_draft'::regclass)`)).rows[0];
   assert.equal(security.rls,true);

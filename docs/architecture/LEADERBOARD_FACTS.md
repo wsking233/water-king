@@ -1,6 +1,8 @@
 # 排行榜私有记录事实层（LB-02 增量）
 
-2026-10-16，本地可运行原型；不代表生产迁移或公开 API。
+2026-10-16，用户授权“直接上生产版本”后，四项私有统计已正式部署；仍不是公开 API 或完整排行榜。历史目标设计草案未部署。
+
+生产 SQL：`supabase/leaderboard-record-facts.sql`；迁移 `20261016162526_add_leaderboard_private_record_facts`。SHA-256：`4d2e722feb5aae06066dfefe14069caf8f463eb50335befadc9c42e8702cc8ae`。只新增 `leaderboard_record_days` / `leaderboard_record_scores` 两函数，读取既有当前实体，无业务数据写入。生产空用户只读查询返回四项零分；anon/authenticated 均无执行权限。
 
 ## 输入与边界
 
@@ -20,4 +22,10 @@
 
 运行 `npm run test:goal-history`：加载既有 Schema/协议/生命周期及两个隔离原型，同一库重放三次并回滚，核对旧协议函数定义未变。SQL 覆盖重复 mutation、嘘嘘、空用户、多账号、补记、删改、北京午夜、非北京会话时区及客户端拒绝执行。PGlite 不能替代真实 Postgres 并发及生产计划验证。
 
-只提交设计 SQL 与测试；后续正式迁移必须单独生成、审阅并获用户批准。
+生产采用无 draft 前缀的正式函数，计算与原型相同；CI 同时重放正式 SQL。后续目标历史及公开接口另行实现，不能把本次迁移当成完整五榜上线。
+
+回滚：先确认没有新依赖，再只撤销本次新增的两个函数（先 scores 后 days），禁止 CASCADE，不触碰 sync 数据。当前没有依赖的新 RPC 或触发器，因此撤销不影响记录同步。默认不执行回滚。
+
+CLI 环境说明：当前 CLI 因只读 `/home/agent/.supabase` 无法启动，旧版尝试也失败；本次保留独立部署 SQL，通过 Supabase MCP 正式迁移工具产生真实迁移编号，不伪造 CLI 迁移文件或历史。
+
+部署后运行安全 Advisor：没有涉及新增函数的发现；既有提示包括 guest_activity 无 RLS policy（私有拒绝客户端访问）、游客可按归属访问自身资料/同步数据（产品要求），以及尚未启用泄露密码保护。未在本次迁移中改变这些设置。密码保护参考：https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection 。

@@ -98,3 +98,5 @@ Vite + React + TypeScript + CSS。前端状态与业务函数在同一项目中�
 LB-02 第一部分仅完成[历史目标设计与本地 SQL 原型](docs/architecture/GOAL_HISTORY.md)：`npm run test:goal-history` 可重复运行隔离 fixture 并校验旧协议不变。未部署目标历史、计分或榜单接口，不修改生产 Schema、不启用 Cron；正式迁移和离线历史策略须另行审阅。
 
 LB-02 后续本地原型新增私有每日记录事实及四项非目标统计（连续/累计记录日、今日/历史饮水量），同一 `test:goal-history` 命令覆盖重复上传、补记、删改与北京跨日。尚无线上榜单功能；见 [事实层契约](docs/architecture/LEADERBOARD_FACTS.md)。
+
+2026-10-16 用户授权生产部署后，四项非目标统计的私有计算函数已迁移到生产（`20261016162526`）；未开放公开榜单或客户端入口，历史目标草案仍未部署。详见[部署记录](docs/architecture/LEADERBOARD_FACTS.md)。
