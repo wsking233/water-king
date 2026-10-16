@@ -50,6 +50,7 @@ import {
 } from "./dataTools";
 import { CupControl } from "./CupControl";
 import { appBuild } from "./build";
+import { EmailAuthProvider } from "./EmailAuthSheet";
 import { AccountPanel } from "./AccountPanel";
 import { DataGate, type DataAccess } from "./DataGate";
 const labels = { water: "喝水", small: "嘘嘘" };
@@ -1322,5 +1323,5 @@ function App({ access }: { access: DataAccess }) {
   );
 }
 createRoot(document.getElementById("root")!).render(
-  <DataGate>{(access) => <App key={access.session.owner} access={access} />}</DataGate>,
+  <EmailAuthProvider><DataGate>{(access) => <App key={access.session.owner} access={access} />}</DataGate></EmailAuthProvider>,
 );

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { getCloudClient } from "./cloud/client";
+import { emailAuthEnabled, getCloudClient } from "./cloud/client";
 import { defaultNickname, enterGuest, loadProfile } from "./cloud/identity";
 import type { DataAccess } from "./DataGate";
 import type { DataSnapshot } from "./dataSession";
 import { totals } from "./records";
+import { useEmailAuth, type EmailAction } from "./EmailAuthSheet";
 import { guestExpiryMessage } from "./cloud/lifecycle";
 
 function ConnectSheet({ preview, accountId, access, close }: { preview: DataSnapshot; accountId: string; access: DataAccess; close: () => void }) {
@@ -58,6 +59,10 @@ export function AccountPanel({ access }: { access: DataAccess }) {
   const [message, setMessage] = useState("");
   const [profileRetry, setProfileRetry] = useState(0);
   const [preview, setPreview] = useState<{ snapshot: DataSnapshot; accountId: string } | null>(null);
+  const openEmailAuth = useEmailAuth();
+  const showEmailAction = (action: EmailAction) => {
+    if (setup.client) openEmailAuth({ client: setup.client, action, accountId: user?.id ?? null });
+  };
   const [online, setOnline] = useState(navigator.onLine);
   const currentId = useRef<string | null>(null);
 
@@ -166,6 +171,12 @@ export function AccountPanel({ access }: { access: DataAccess }) {
           {busy ? "正在登录…" : online ? "游客登录" : "联网后可游客登录"}
         </button>
       </>}
+    {emailAuthEnabled && ready && setup.client && <div className="account-auth-actions">
+      {user?.is_anonymous && <button disabled={!online || busy} onClick={() => showEmailAction("bind")}>绑定邮箱</button>}
+      {user && !user.is_anonymous && <button disabled={!online || busy} onClick={() => showEmailAction("password")}>设置或修改密码</button>}
+      <button disabled={!online || busy} onClick={() => showEmailAction("login")}>邮箱密码登录</button>
+      <button disabled={!online || busy} onClick={() => showEmailAction("recover")}>找回密码</button>
+    </div>}
     <p role="status">{access.sync.message}</p>
     {!access.syncEnabled && <p>云同步正在准备中。当前仍可在本机记录和导出备份。</p>}
     {access.syncEnabled && user && access.session.owner === "local" && <button className="primary" disabled={busy || !online} onClick={async () => {
@@ -180,7 +191,7 @@ export function AccountPanel({ access }: { access: DataAccess }) {
         onClick={() => void access.synchronize()}> {access.sync.status === "syncing" ? "正在同步…" : "立即同步"}</button>
       <p>全部记录默认私有。断网时先保存到本机，联网后补传。发生冲突时暂停同步，保留本机改动。</p>
     </>}
-    <p>账号绑定与游客 30 天过期清理仍在开发，请保留备份。</p>
+    <p>邮箱绑定需完成邮件验证并设置密码。游客定时清理尚未启用，请保留备份。</p>
     {preview && <ConnectSheet preview={preview.snapshot} accountId={preview.accountId} access={access} close={() => setPreview(null)} />}
     {error && <>
       <p className="account-error" role="alert">{error}</p>
