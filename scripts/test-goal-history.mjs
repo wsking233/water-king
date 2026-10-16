@@ -18,15 +18,17 @@ try {
   for(const file of ['schema.sql','sync-schema.sql','lifecycle-upgrade.sql'])await db.exec(await sql(file));
   const before=await protocol();
   await db.exec(await sql('design/goal-history.prototype.sql'));
+  await db.exec(await sql('design/leaderboard-facts.prototype.sql'));
   for(let round=1;round<=3;round++) {
     await db.exec(await sql('design/goal-history.test.sql'));
+    await db.exec(await sql('design/leaderboard-facts.test.sql'));
     const counts=(await db.query(`select
       (select count(*)::int from auth.users) as users,
       (select count(*)::int from waterking_private.goal_history_baselines_draft) as baselines,
       (select count(*)::int from waterking_private.goal_history_events_draft) as events,
       (select count(*)::int from waterking_private.sync_receipts) as receipts`)).rows[0];
     assert.deepEqual(counts,{users:0,baselines:0,events:0,receipts:0});
-    console.log(`PASS goal history replay ${round}/3: fixtures fully rolled back`);
+    console.log(`PASS goal history and record facts replay ${round}/3: fixtures fully rolled back`);
   }
   for(const file of ['profile-rls.test.sql','sync-protocol.test.sql','lifecycle.test.sql']) {
     await db.exec(await sql(file));console.log(`PASS unchanged existing contract: ${file}`);
