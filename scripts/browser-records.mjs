@@ -81,7 +81,7 @@ try{
  await damaged.getByRole('button',{name:'确认替换并恢复',exact:true}).waitFor();
  assert.equal(await damaged.evaluate(()=>localStorage.getItem('water-king.state.v2')),'{broken');
  await damaged.getByRole('button',{name:'确认替换并恢复',exact:true}).click();
- await damaged.waitForFunction(()=>JSON.parse(localStorage.getItem('water-king.state.v2')).entries.length===2);
+ await damaged.waitForFunction(()=>{try{return JSON.parse(localStorage.getItem('water-king.state.v2')).entries.length===2;}catch{return false;}});
  await damaged.getByRole('button',{name:'今天',exact:true}).click();assert.equal(await damaged.getByRole('button',{name:/嘬一口/}).isEnabled(),true);
  if(process.env.SCREENSHOT_PATH)await page.screenshot({path:process.env.SCREENSHOT_PATH});
  console.log('PASS local records UX: filter empty state, timestamp precision, backfill/local calendar, today navigation, totals, inline delete/cancel/undo, week review, bounded large lists, crash recovery and explicit damaged-data backup repair');
