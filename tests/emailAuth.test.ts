@@ -1,3 +1,4 @@
+import { emailPreviewEnabled } from "../src/cloud/preview.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { requestBinding, confirmBinding, setAccountPassword, loginWithPassword, requestPasswordRecovery, confirmPasswordRecovery, emailAuthMessage } from "../src/cloud/emailAuth.ts";
@@ -47,4 +48,13 @@ test("errors do not render raw server messages or expose account secrets", () =>
   assert.match(emailAuthMessage({ code: "email_exists" }), /不会自动合并/);
   assert.match(emailAuthMessage({ code: "invalid_credentials" }), /邮箱或密码/);
   assert.doesNotMatch(emailAuthMessage(Error("secret token")), /secret token/);
+});
+
+
+test("email acceptance requires an explicit URL or build opt-in, without persisting a flag", () => {
+  assert.equal(emailPreviewEnabled(undefined, ""), false);
+  assert.equal(emailPreviewEnabled("false", "?email-preview=0"), false);
+  assert.equal(emailPreviewEnabled("false", "?email-preview=true"), false);
+  assert.equal(emailPreviewEnabled("false", "?email-preview=1"), true);
+  assert.equal(emailPreviewEnabled("true", ""), true);
 });
