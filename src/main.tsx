@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Trophy,
+  Award,
   Droplet,
   Waves,
   Plus,
@@ -50,6 +51,7 @@ import {
   weekSummary,
 } from "./dataTools";
 import { CupControl } from "./CupControl";
+import { Achievements } from "./Achievements";
 import { AboutApp } from "./AboutApp";
 import { appVersion } from "./build";
 import { EmailAuthProvider } from "./EmailAuthSheet";
@@ -164,6 +166,7 @@ function App({ access }: { access: DataAccess }) {
     initial.goal === undefined ? 2000 : initial.goal,
   );
   const [goalDraft, setGoalDraft] = useState("2000");
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [goalOff, setGoalOff] = useState(false);
   const [goalTicket, setGoalTicket] = useState<GoalTicket | null>(null);
   const [goalTicketLoading, setGoalTicketLoading] = useState(false);
@@ -841,6 +844,9 @@ function App({ access }: { access: DataAccess }) {
               </div>
             </section>
             <AccountPanel access={access} />
+            <h2 className="settings-section-title">记录里程碑</h2>
+            <section className="settings"><button className="preference" onClick={() => setAchievementsOpen(true)}><Award /><span><strong>我的成就</strong><small>九个小目标 · 私有展示 · 按有效记录重算</small></span><ChevronRight size={18}/></button></section>
+            {achievementsOpen && <Achievements owner={access.session.owner} pending={access.details.pending} syncMessage={access.sync.message} close={() => setAchievementsOpen(false)} />}
             <LeaderboardPrivacy owner={access.session.owner} />
             <h2 className="settings-section-title">日常设置</h2>
             <section className="settings">
