@@ -46,5 +46,7 @@ test("password login, recovery verification and password updates use distinct Au
 test("errors do not render raw server messages or expose account secrets", () => {
   assert.match(emailAuthMessage({ code: "email_exists" }), /不会自动合并/);
   assert.match(emailAuthMessage({ code: "invalid_credentials" }), /邮箱或密码/);
+  assert.match(emailAuthMessage({ code: "unexpected_failure" }), /认证或邮件服务配置/);
+  assert.doesNotMatch(emailAuthMessage({ code: "unexpected_failure" }), /检查网络/);
   assert.doesNotMatch(emailAuthMessage(Error("secret token")), /secret token/);
 });

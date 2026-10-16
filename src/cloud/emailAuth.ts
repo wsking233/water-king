@@ -62,6 +62,7 @@ export function emailAuthMessage(cause: unknown): string {
   if (code === "invalid_credentials") return "邮箱或密码不正确，请检查后重试。";
   if (["otp_expired", "otp_disabled"].includes(code)) return "验证码无效或已过期，请重新获取。";
   if (["over_email_send_rate_limit", "over_request_rate_limit"].includes(code)) return "操作过于频繁，请稍后重试。";
+  if (code === "unexpected_failure") return "账号服务处理失败，请稍后重试；若持续失败，请联系维护者检查认证或邮件服务配置。已有记录不会被删除。";
   if (code === "weak_password") return "密码未满足账号服务的安全要求，请换一个更强的密码。";
   if (code === "email_not_confirmed") return "邮箱尚未验证，请先完成邮箱验证。";
   if (cause instanceof Error && /^(账号已变化|此账号已绑定|请先完成|邮箱验证尚未完成)/.test(cause.message)) return cause.message;
