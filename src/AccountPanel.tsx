@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { emailAuthEnabled, getCloudClient } from "./cloud/client";
+import { getCloudClient } from "./cloud/client";
 import { defaultNickname, enterGuest, loadProfile } from "./cloud/identity";
 import type { DataAccess } from "./DataGate";
 import type { DataSnapshot } from "./dataSession";
@@ -171,8 +171,7 @@ export function AccountPanel({ access }: { access: DataAccess }) {
           {busy ? "正在登录…" : online ? "游客登录" : "联网后可游客登录"}
         </button>
       </>}
-    {emailAuthEnabled && <p role="status">邮箱功能验收中。请使用测试账号；云同步是否开放以同步状态为准。</p>}
-    {emailAuthEnabled && ready && setup.client && <div className="account-auth-actions">
+    {ready && setup.client && <div className="account-auth-actions">
       {user?.is_anonymous && <button disabled={!online || busy} onClick={() => showEmailAction("bind")}>绑定邮箱</button>}
       {user && !user.is_anonymous && <button disabled={!online || busy} onClick={() => showEmailAction("password")}>设置或修改密码</button>}
       <button disabled={!online || busy} onClick={() => showEmailAction("login")}>邮箱密码登录</button>

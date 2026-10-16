@@ -1,8 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./models";
-import { emailPreviewEnabled } from "./preview";
 import { cloudConfig } from "./config";
-export const emailAuthEnabled = emailPreviewEnabled(import.meta.env.VITE_EMAIL_AUTH_PREVIEW, window.location.search);
 export const cloudSyncEnabled = import.meta.env.VITE_CLOUD_SYNC_PREVIEW === "true";
 
 let client: SupabaseClient<Database> | null | undefined;

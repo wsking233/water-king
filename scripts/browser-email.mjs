@@ -11,7 +11,6 @@ try {
     'import.meta.env.VITE_SUPABASE_URL':JSON.stringify('https://test.supabase.co'),
     'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY':JSON.stringify('sb_publishable_browser_test'),
     'import.meta.env.VITE_CLOUD_SYNC_PREVIEW':JSON.stringify('false'),
-    'import.meta.env.VITE_EMAIL_AUTH_PREVIEW':JSON.stringify('false'),
   }, build:{outDir,emptyOutDir:true},logLevel:'error' });
   server = await preview({base:'/water-king/',build:{outDir},preview:{host:'127.0.0.1',port:0}});
   const origin=`http://127.0.0.1:${server.httpServer.address().port}/water-king/`;
@@ -57,9 +56,6 @@ try {
   await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByRole('button',{name:'游客登录',exact:true}).click();
   await page.getByText('用户 ID：aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',{exact:true}).waitFor();
-  assert.equal(await page.getByRole('button',{name:'绑定邮箱',exact:true}).count(),0);
-  await page.goto(origin+'?email-preview=1');
-  await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByRole('button',{name:'绑定邮箱',exact:true}).click();
   let sheet=page.getByRole('dialog');
   await sheet.getByLabel('邮箱',{exact:true}).fill('test@example.com');
@@ -117,7 +113,7 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.goto(origin);
   await page.getByRole('button',{name:'我的',exact:true}).click();
-  assert.equal(await page.getByRole('button',{name:'邮箱密码登录',exact:true}).count(),0);
+  await page.getByRole('button',{name:'邮箱密码登录',exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   console.log('PASS: 320px email binding retains ID; invalid OTP and password mismatch block updates; password login errors preserve identity; account switch retains local records; recovery survives account-view replacement and uses recovery OTP; no real Auth or email requests.');
 } finally {
