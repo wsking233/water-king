@@ -12,7 +12,7 @@
 - 「回顾」展示最近 7 天的饮水量、嘘嘘次数和记录天数，点击某天查看明细。未记录不代表没有发生。
 - 「我的」支持 JSON 备份导出和恢复。恢复前校验文件并要求确认，导入会替换本机记录、杯子和目标，不会自动合并。
 
-水量只是估计，不需要精确测量；目标与回顾不用于医疗判断。未加入提醒或联网排行榜。邮箱绑定和密码登录未实现；30 天游客生命周期核心已在本地验证，生产迁移待批准，定时清理尚未启用。完整 V0.2 尚未发布。
+水量只是估计，不需要精确测量；目标与回顾不用于医疗判断。未加入提醒或联网排行榜。邮箱绑定和密码登录未实现；30 天游客生命周期核心已在本地验证，生产迁移已获批准并应用，定时清理尚未启用。完整 V0.2 尚未发布。
 
 ## 数据与离线
 
@@ -55,7 +55,7 @@ npm run preview -- --base=/water-king/
 
 ## 架构
 
-生命周期核心与受控迁移见 [LIFECYCLE.md](docs/architecture/LIFECYCLE.md)。`npm run test:lifecycle` 使用 PGlite 的本地 PostgreSQL 与最小 Auth 模型，运行权限、同步协议和生命周期 SQL 回归，不连接真实项目。自动审批审查拒绝了生产试运行，因此 `supabase/lifecycle-upgrade.sql` 仍待明确批准；没有修改现有生产策略或删除真实账号。新客户端在预览同步前要求 `account_status` 验证，旧 schema 会停止该轮而保留本机数据，不绕过生命周期检查。
+生命周期核心与受控迁移见 [LIFECYCLE.md](docs/architecture/LIFECYCLE.md)。`npm run test:lifecycle` 使用 PGlite 的本地 PostgreSQL 与最小 Auth 模型，运行权限、同步协议和生命周期 SQL 回归，不连接真实项目。用户明确批准后，`supabase/lifecycle-upgrade.sql` 已于 2026-10-16 作为受控迁移应用，触发器、RLS 和函数权限已核验；未启用清理调度或删除真实账号。新客户端在预览同步前要求 `account_status` 验证，旧 schema 会停止该轮而保留本机数据，不绕过生命周期检查。
 
 Vite + React + TypeScript + CSS。前端状态与业务函数在同一项目中；Supabase 提供认证、私有表与事务 RPC。
 

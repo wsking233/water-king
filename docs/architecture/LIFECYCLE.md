@@ -1,10 +1,10 @@
 # 游客生命周期核心（WK-06）
 
-状态：代码与本地隔离 PostgreSQL 验证已完成，**未部署到 Supabase**。自动审批审查拒绝了向现有项目提交升级与回滚测试的请求，理由为认证触发器、访问策略和过期账号删除需要明确审阅，并作为受控迁移应用。本次未重试、绕过或执行真实账号清理。
+状态：代码与本地隔离 PostgreSQL 验证已完成。用户明确批准这份升级后，已于 2026-10-16（北京时间）应用生产受控迁移 `20261016014201_add_guest_lifecycle_guards`。此前的升级加回滚测试请求被自动审批审查拒绝；获得具体批准后改为正式迁移，未运行生产清理测试或删除真实账号。
 
 ## 可审阅的升级
 
-`supabase/lifecycle-schema.sql` 定义生命周期模型/函数；`npm run lifecycle:generate` 将其与现有同步 RPC 的鉴权入口升级合并为 **`supabase/lifecycle-upgrade.sql`**。该文件是待批准的迁移内容，依赖现有 profiles/sync schema，不能重复安装。它会：
+`supabase/lifecycle-schema.sql` 定义生命周期模型/函数；`npm run lifecycle:generate` 将其与现有同步 RPC 的鉴权入口升级合并为 **`supabase/lifecycle-upgrade.sql`**。该文件是已获批准并应用的迁移内容，依赖现有 profiles/sync schema，不能重复安装。它会：
 
 - 新增私有 `guest_activity`，从服务端已知创建、登录、profile 创建及记录修改时间初始化，不把全体活跃时间重置为部署时间。客户端不能直读或改写。
 - 按服务端 `clock_timestamp()` 判定连续 **720 小时**，到点拒绝恢复，不依赖清理是否运行。缺少可信创建/活跃时间的匿名记录按失效处理；已绑定账号豁免。
@@ -17,7 +17,7 @@
 
 ## 客户端
 
-- 同步与首次迁移前先调用 `account_status`；新 RPC 缺失或网络失败即停止，不通过旧协议继续上传。默认关闭预览时不会触发此路径，也不会假称生产生命周期已部署。
+- 同步与首次迁移前先调用 `account_status`；新 RPC 缺失或网络失败即停止，不通过旧协议继续上传。默认关闭预览时不会触发此路径。
 - 仅服务端 `PT401 / guest_expired` 显示过期状态，保留本机快照、队列与导出能力并停止自动重试。普通网络/认证错误不冒充游客过期。重建游客及重新导入入口尚未完成，不自动换 ID 或移动数据。
 - 同用户 TOKEN_REFRESHED、重复 SIGNED_IN、USER_UPDATED 不再触发续期同步；首次恢复/换身份、前台返回、手动同步和实际写入才进入流程。隐藏页面不为昵称读取发请求，不增加周期活动心跳。
 
@@ -27,4 +27,4 @@
 
 已验证到期前 1 微秒、恰好到期、到期后、跨夏令时 720 小时、绑定账号豁免、JWT 匿名标识不改变资格、过期读写/续期/绑定拒绝、活跃与绑定账号不误清理、客户端不能清理或改写活动、私人数据级联删除及删除后旧 uid 被拒绝。既有同步/权限 SQL 回归通过；Node 与模拟服务浏览器回归另行运行。
 
-这些测试不代表 Supabase Auth API 或真实多连接并发已验收。托管 Auth 触发器影响、生产 Advisor、真实绑定与清理/同步竞争需在批准后受控验证。调度、完整过期恢复界面、绑定及冲突产品选项仍未完成，不构成完整 V0.2 发布。
+这些测试不代表 Supabase Auth API 或真实多连接并发已验收。生产只读核验已确认活动表 RLS、Auth 触发器启用、profile 策略与同步资格检查生效、公开状态函数为 invoker，anon 无执行权限，authenticated 无清理权限。生产 Advisor 无 ERROR：私有活动表无策略是刻意禁止直访；新索引未使用属于 INFO；游客访问自己的数据符合产品要求。已有[密码泄露保护未启用警告](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)仍保留，密码登录尚未实现。托管 Auth API 行为与真实绑定/清理/同步多连接竞争仍待受控验收。调度、完整过期恢复界面、绑定及冲突产品选项仍未完成，不构成完整 V0.2 发布。
