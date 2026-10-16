@@ -27,6 +27,10 @@ jobs:
       - run: npm run test:leaderboard
       - run: npm run test:goal-history
       - run: git diff --exit-code -- supabase/lifecycle-upgrade.sql
+      - name: Local records and recovery UX
+        run: npm run test:records-browser
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
       - name: Mobile sync and offline regression
         run: npm run test:browser
         env:

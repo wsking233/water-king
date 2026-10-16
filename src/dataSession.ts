@@ -36,7 +36,7 @@ export class DataSession {
         return { state: this.local.load(), version, error: "" };
       } catch {
         return { state: { entries: [], cup: newCup() }, version,
-          error: "本地记录暂时无法读取，原数据未被覆盖。可前往「我的」清空后重新开始。" };
+          error: "本地记录暂时无法读取，原数据未被覆盖。可先重新打开应用，或在「我的」从有效备份恢复；请不要清除浏览器数据。" };
       }
     }
     const loaded = await this.repository!.load(this.owner);

@@ -1,6 +1,6 @@
 {
   "name": "water-king",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,7 +19,8 @@
     "test:leaderboard": "node scripts/test-leaderboard.mjs",
     "test:leaderboard-browser": "node scripts/browser-leaderboard.mjs",
     "test:goal-browser": "node scripts/browser-goal-history.mjs",
-    "test:achievements": "node scripts/test-achievements.mjs"
+    "test:achievements": "node scripts/test-achievements.mjs",
+    "test:records-browser": "node scripts/browser-records.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",

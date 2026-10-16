@@ -2344,3 +2344,23 @@ body {
 .achievement-empty h3 { font-size:17px; margin:15px 0; }
 .achievement-empty p,.achievement-note { font-size:12px; line-height:1.9; color:#788b94; }
 .achievement-note { margin:18px 0; }
+
+.history-day-tools { display:flex; align-items:center; justify-content:space-between; min-height:44px; gap:10px; margin:4px 0 12px; }
+.history-day-tools small { color:#788a94; font-size:11px; }
+.history-day-tools button { min-height:44px; padding:8px 12px; border-radius:12px; color:#446d80; background:#e7f0f4; font-size:12px; }
+.history-day-totals { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 0 18px; }
+.history-day-totals>span { background:#eaf2f5; border-radius:17px; padding:17px; }
+.history-day-totals small { display:block; color:#708793; font-size:12px; margin-bottom:8px; }
+.history-day-totals strong { font-size:24px; color:#406375; font-variant-numeric:tabular-nums; }
+.history-day-totals em { font-size:12px; font-style:normal; font-weight:400; }
+.delete-confirmation { border-radius:14px; padding:14px; background:#f9eceb; color:#8a5554; margin-top:12px; font-size:13px; line-height:1.8; }
+.delete-confirmation .secondary { margin-bottom:0; }
+.app-recovery main { padding:70px 24px 36px; }
+.app-recovery main>svg { color:#83a5b5; margin-bottom:24px; }
+.app-recovery h1 { font-size:25px; margin-bottom:18px; }
+.app-recovery p { line-height:1.9; font-size:14px; color:#6c7c85; margin-bottom:24px; }
+.app-recovery .primary { gap:8px; }
+.app-recovery .recovery-version { margin-top:24px; font-size:12px; }
+
+.history-loaded { text-align:center; font-size:12px; color:#7b8c94; margin:18px 0 4px; }
+.history-day-totals strong { overflow-wrap:anywhere; }

@@ -92,6 +92,8 @@ export function useOfflineApp() {
   return { status, available };
 }
 export async function prepareRefresh() {
+  // Recovery screens may mount before the normal app registered its worker.
+  if (!registration && "serviceWorker" in navigator) registration = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL);
   if (!registration) return;
   await registration.update();
   if (registration.installing) await waitForInstall(registration.installing);

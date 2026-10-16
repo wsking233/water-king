@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AppRecovery } from "./AppRecovery";
 import { createRoot } from "react-dom/client";
 import {
   Trophy,
@@ -42,6 +43,7 @@ import {
 } from "./records";
 import "./style.css";
 import { useOfflineApp, prepareRefresh } from "./offline";
+import { localDayInput, parseHistoryDay, moveHistoryDay } from "./historyDates";
 import { EntryEditor } from "./EntryEditor";
 import {
   backupText,
@@ -71,7 +73,9 @@ function BottomSheet({
   title,
   close,
   children,
+  busy = false,
 }: {
+  busy?: boolean;
   title: string;
   close: () => void;
   children: ReactNode;
@@ -96,10 +100,10 @@ function BottomSheet({
       aria-labelledby="sheet-title"
       onCancel={(e) => {
         e.preventDefault();
-        close();
+        if (!busy) close();
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) {
+        if (!busy && e.target === e.currentTarget) {
           const r = e.currentTarget.getBoundingClientRect();
           if (e.clientY < r.top || e.clientX < r.left || e.clientX > r.right)
             close();
@@ -113,6 +117,7 @@ function BottomSheet({
           className="icon-button"
           autoFocus
           aria-label="关闭弹层"
+          disabled={busy}
           onClick={close}
         >
           <X />
@@ -137,6 +142,9 @@ function App({ access }: { access: DataAccess }) {
   const [editorDate, setEditorDate] = useState(new Date());
   const [reviewKind, setReviewKind] = useState<Kind>("water");
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [confirmCupDelete, setConfirmCupDelete] = useState(false);
+  const [historyLimit, setHistoryLimit] = useState(50);
+  const [cupDetailLimit, setCupDetailLimit] = useState(50);
   const [refreshing, setRefreshing] = useState(false);
   const offline = useOfflineApp();
   async function refreshApp() {
@@ -326,6 +334,8 @@ function App({ access }: { access: DataAccess }) {
     if (await persist(entries, "杯子容量已保存", undefined, nextCup)) setSheet(null);
   }
   function open(next: Sheet) {
+    if (savingRef.current) return;
+    setConfirmCupDelete(false); setCupDetailLimit(50);
     if (next === "water") setAmount(String(cup.capacity));
     if (next === "goal") {
       setGoalDraft(String(goal ?? 2000));
@@ -395,20 +405,19 @@ function App({ access }: { access: DataAccess }) {
       setError(e instanceof Error ? e.message : "无法读取备份。");
     }
   }
-  function changeDay(offset: number) {
-    setSelectedDate((d) => {
-      const next = new Date(d);
-      next.setDate(next.getDate() + offset);
-      return next;
-    });
-  }
-  const today = todayEntries(entries, now),
-    stats = totals(today),
-    percent = goal ? Math.min(100, Math.round((stats.water / goal) * 100)) : 0;
-  const history = todayEntries(entries, selectedDate).filter(
-    (e) => filter === "all" || e.kind === filter,
-  );
-  const days = new Set(entries.map((e) => dayKey(new Date(e.at)))).size;
+  function changeDay(offset: number) { setSelectedDate(d => moveHistoryDay(d,offset,new Date())); }
+  const todayKey = dayKey(now), selectedKey = dayKey(selectedDate);
+  const today = useMemo(() => todayEntries(entries, now), [entries, todayKey]);
+  const todayGroups = useMemo(() => groupRecords(today), [today]);
+  const stats = totals(today), percent = goal ? Math.min(100, Math.round((stats.water / goal) * 100)) : 0;
+  const selectedEntries = useMemo(() => todayEntries(entries,selectedDate),[entries,selectedKey]);
+  const history = useMemo(() => selectedEntries.filter(e => filter === "all" || e.kind === filter),[selectedEntries,filter]);
+  const historyGroups = useMemo(() => groupRecords(history),[history]);
+  useEffect(() => { setHistoryLimit(50); },[selectedKey,filter]);
+  const selectedStats = totals(selectedEntries);
+  const days = useMemo(() => new Set(entries.map(e => dayKey(new Date(e.at)))).size,[entries]);
+  const week = useMemo(() => weekSummary(entries,now),[entries,todayKey]);
+  const weekMaximum = Math.max(1,...week.map(d => d[reviewKind]));
   function recordList(list: RecordGroup[]) {
     return (
       <div className="record-list">
@@ -416,6 +425,7 @@ function App({ access }: { access: DataAccess }) {
           list.map((e) => (
             <button
               key={e.id}
+              disabled={saving}
               className="record"
               onClick={() => open(e)}
               aria-label={`查看${labels[e.kind]} ${e.amount}${e.kind === "water" ? "毫升" : "次"}记录`}
@@ -450,13 +460,14 @@ function App({ access }: { access: DataAccess }) {
             <h3>
               {tab === "today"
                 ? "第一口水，从现在开始"
-                : "这一天还没有相关记录"}
+                : filter !== "all" && selectedEntries.length ? `这一天没有${labels[filter]}记录` : "这一天还没有记录"}
             </h3>
             <p>
               {tab === "today"
                 ? "长按水杯展示区，或轻点下方「嘬一口」。"
-                : "用上方日期切换，看看其他日子的记录。"}
+                : filter !== "all" && selectedEntries.length ? "其他类型的记录仍在，可以切回全部查看。" : "可以补记这一天，或切换日期查看。"}
             </p>
+            {tab === "history" && filter !== "all" && selectedEntries.length > 0 && <button className="secondary" onClick={() => setFilter("all")}>查看当天全部记录</button>}
           </div>
         )}
       </div>
@@ -659,13 +670,13 @@ function App({ access }: { access: DataAccess }) {
             <section className="recent">
               <div className="section-heading">
                 <h2>
-                  今天的足迹 <span>{groupRecords(today).length}</span>
+                  今天的足迹 <span>{todayGroups.length}</span>
                 </h2>
-                <button onClick={() => navigate("history")}>
+                <button onClick={() => { navigate("history"); setFilter("all"); }}>
                   全部记录 <ArrowUpRight size={16} />
                 </button>
               </div>
-              {recordList(groupRecords(today).slice(0, 3))}
+              {recordList(todayGroups.slice(0, 3))}
             </section>
             <p className="gentle-note">
               按身体需要饮水，参考目标不是医疗建议。
@@ -696,6 +707,7 @@ function App({ access }: { access: DataAccess }) {
                 <span>
                   {dayKey(selectedDate) === dayKey(now) ? "今天 · " : ""}
                   {selectedDate.toLocaleDateString("zh-CN", {
+                    year: selectedDate.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
                     month: "long",
                     day: "numeric",
                   })}
@@ -703,21 +715,25 @@ function App({ access }: { access: DataAccess }) {
                 <input
                   aria-label="选择记录日期"
                   type="date"
-                  value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`}
+                  value={localDayInput(selectedDate)}
+                  max={localDayInput(now)}
                   onChange={(e) => {
-                    if (e.target.value)
-                      setSelectedDate(new Date(`${e.target.value}T12:00:00`));
+                    const date = parseHistoryDay(e.target.value);
+                    if (date) setSelectedDate(date);
                   }}
                 />
               </label>
               <button
                 className="icon-button"
                 aria-label="后一天"
+                disabled={localDayInput(selectedDate) >= localDayInput(now)}
                 onClick={() => changeDay(1)}
               >
                 <ChevronRight />
               </button>
             </div>
+            <div className="history-day-tools"><small>按此设备所在时区查看</small>{selectedKey !== todayKey && <button onClick={() => setSelectedDate(new Date())}>回到今天</button>}</div>
+            <section className="history-day-totals" aria-label="当日汇总"><span><small>全天饮水</small><strong>{selectedStats.water.toLocaleString()} <em>ml</em></strong></span><span><small>全天嘘嘘</small><strong>{selectedStats.small} <em>次</em></strong></span></section>
             <div className="filters" aria-label="记录类型">
               {(["all", "water", "small"] as const).map((kind) => (
                 <button
@@ -731,10 +747,12 @@ function App({ access }: { access: DataAccess }) {
               ))}
             </div>
             <div className="history-summary">
-              <span>{groupRecords(history).length} 项记录</span>
+              <span>{historyGroups.length} 项{history.length !== historyGroups.length ? ` · ${history.length} 条明细` : "记录"}</span>
               <span>点击查看详情</span>
             </div>
-            {recordList(groupRecords(history))}
+            <div id="history-records">{recordList(historyGroups.slice(0,historyLimit))}</div>
+            {historyGroups.length > 50 && <p className="history-loaded" role="status">已显示 {Math.min(historyLimit,historyGroups.length)} / {historyGroups.length} 项</p>}
+            {historyGroups.length > historyLimit && <button className="secondary" aria-controls="history-records" onClick={() => setHistoryLimit(n => n + 50)}>再看 50 项记录</button>}
           </>
         )}
         {tab === "review" && (
@@ -760,18 +778,14 @@ function App({ access }: { access: DataAccess }) {
                   {reviewKind === "water" ? "7 天饮水总量" : "7 天嘘嘘总次数"}
                 </span>
                 <strong>
-                  {weekSummary(entries, now)
+                  {week
                     .reduce((n, d) => n + d[reviewKind], 0)
                     .toLocaleString()}
                   <small>{reviewKind === "water" ? " ml" : " 次"}</small>
                 </strong>
               </div>
               <div className="week-chart">
-                {weekSummary(entries, now).map((day) => {
-                  const maximum = Math.max(
-                    1,
-                    ...weekSummary(entries, now).map((d) => d[reviewKind]),
-                  );
+                {week.map((day) => {
                   return (
                     <button
                       className="week-day"
@@ -787,7 +801,7 @@ function App({ access }: { access: DataAccess }) {
                       <span className="week-column">
                         <span
                           style={{
-                            height: `${(day[reviewKind] / maximum) * 100}%`,
+                            height: `${(day[reviewKind] / weekMaximum) * 100}%`,
                           }}
                         />
                       </span>
@@ -805,14 +819,14 @@ function App({ access }: { access: DataAccess }) {
             <div className="review-summary">
               <span>
                 <strong>
-                  {weekSummary(entries, now).filter((d) => d.hasRecords).length}
+                  {week.filter((d) => d.hasRecords).length}
                 </strong>
                 天有记录
               </span>
               <span>
                 <strong>
                   {Math.round(
-                    weekSummary(entries, now).reduce((n, d) => n + d.water, 0) /
+                    week.reduce((n, d) => n + d.water, 0) /
                       7,
                   )}
                 </strong>
@@ -900,7 +914,7 @@ function App({ access }: { access: DataAccess }) {
               </button>
               <button
                 className="preference"
-                disabled={blocked || saving}
+                disabled={saving}
                 onClick={() => fileInput.current?.click()}
               >
                 <Upload />
@@ -969,6 +983,7 @@ function App({ access }: { access: DataAccess }) {
       {!sheet && notification}
       {sheet && (
         <BottomSheet
+          busy={saving}
           title={
             sheet === "edit"
               ? editing
@@ -1000,6 +1015,7 @@ function App({ access }: { access: DataAccess }) {
               entry={editing}
               date={editorDate}
               onSave={saveEdit}
+              busy={saving}
             />
           ) : sheet === "import" && pendingBackup ? (
             <>
@@ -1017,6 +1033,7 @@ function App({ access }: { access: DataAccess }) {
               </button>
               <button
                 className="primary import-confirm"
+                disabled={saving}
                 onClick={async () => {
                   if (
                     await persist(
@@ -1035,10 +1052,11 @@ function App({ access }: { access: DataAccess }) {
                   }
                 }}
               >
-                确认替换并恢复
+                {saving ? "正在恢复…" : "确认替换并恢复"}
               </button>
               <button
                 className="secondary"
+                disabled={saving}
                 onClick={() => {
                   setSheet(null);
                   setPendingBackup(null);
@@ -1209,6 +1227,7 @@ function App({ access }: { access: DataAccess }) {
               </p>
               <button
                 className="danger"
+                disabled={saving}
                 onClick={async () => {
                   if (
                     await persist(
@@ -1221,9 +1240,9 @@ function App({ access }: { access: DataAccess }) {
                     setSheet(null);
                 }}
               >
-                确认清空全部记录
+                {saving ? "正在清空…" : "确认清空全部记录"}
               </button>
-              <button className="secondary" onClick={() => setSheet(null)}>
+              <button className="secondary" disabled={saving} onClick={() => setSheet(null)}>
                 保留记录
               </button>
             </>
@@ -1259,7 +1278,7 @@ function App({ access }: { access: DataAccess }) {
                         这杯的记录已删完，可撤销刚才的删除。
                       </p>
                     )}
-                    {sheet.members.map((entry) => (
+                    {sheet.members.slice(0,cupDetailLimit).map((entry) => (
                       <div className="cup-detail-row" key={entry.id}>
                         <span>
                           {new Date(entry.at).toLocaleTimeString("zh-CN", {
@@ -1286,15 +1305,14 @@ function App({ access }: { access: DataAccess }) {
                       </div>
                     ))}
                   </div>
+                  {sheet.members.length > cupDetailLimit && <button className="secondary" onClick={() => setCupDetailLimit(n => n + 50)}>再看 50 条明细</button>}
+                  {confirmCupDelete && <div className="delete-confirmation" role="alert"><p>将删除这杯的 {sheet.members.length} 条记录，该日累计和相关统计会减少。删除后可立即撤销。</p><button className="secondary" disabled={saving} onClick={() => setConfirmCupDelete(false)}>保留这杯记录</button></div>}
                   <button
                     className="delete-record"
                     disabled={blocked || saving || sheet.members.length === 0}
                     onClick={async () => {
-                      if (
-                        window.confirm(
-                          "删除这杯水的全部饮水记录？今日累计也会同步减少。",
-                        )
-                      ) {
+                      if (!confirmCupDelete) { setConfirmCupDelete(true); return; }
+                      {
                         const ids = new Set(sheet.members.map((e) => e.id));
                         if (
                           await persist(
@@ -1312,7 +1330,7 @@ function App({ access }: { access: DataAccess }) {
                     }}
                   >
                     <Trash2 size={18} />
-                    删除整杯记录
+                    {confirmCupDelete ? "确认删除整杯" : "删除整杯记录"}
                   </button>
                 </>
               ) : (
@@ -1343,5 +1361,5 @@ function App({ access }: { access: DataAccess }) {
   );
 }
 createRoot(document.getElementById("root")!).render(
-  <EmailAuthProvider><DataGate>{(access) => <App key={access.session.owner} access={access} />}</DataGate></EmailAuthProvider>,
+  <AppRecovery><EmailAuthProvider><DataGate>{(access) => <App key={access.session.owner} access={access} />}</DataGate></EmailAuthProvider></AppRecovery>,
 );
