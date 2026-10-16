@@ -12,7 +12,7 @@ const defines = {
 };
 async function buildApp(version, enabled = true) {
   await build({ base: '/water-king/', define: { ...defines,
-    'import.meta.env.VITE_CLOUD_SYNC_PREVIEW': JSON.stringify(String(enabled)), __APP_BUILD__: JSON.stringify(version) },
+    'import.meta.env.VITE_CLOUD_SYNC_PREVIEW': JSON.stringify(enabled ? '' : 'false'), __APP_BUILD__: JSON.stringify(version) },
     build: { outDir, emptyOutDir: true }, logLevel: 'error' });
 }
 await buildApp('browser-first');
@@ -83,6 +83,13 @@ try {
   await page.goto(origin);
   await page.getByRole('button',{name:'嘬一口',exact:false}).click();
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('water-king.state.v2'))?.entries.length===1);
+  // A first import larger than one 200-mutation pass must finish without repeated clicks.
+  await page.evaluate(()=>{
+    const state=JSON.parse(localStorage.getItem('water-king.state.v2'));
+    for(let i=0;i<205;i++)state.entries.push({id:`bulk-${i}`,kind:'water',amount:10,at:new Date(Date.now()-60000-i*1000).toISOString()});
+    localStorage.setItem('water-king.state.v2',JSON.stringify(state));
+  });
+  await page.reload();
   const original = await page.evaluate(()=>localStorage.getItem('water-king.state.v2'));
   await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByRole('button',{name:'游客登录',exact:true}).click();
@@ -100,12 +107,18 @@ try {
   await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByText('记录已同步',{exact:true}).waitFor();
   const first = await snapshot(page);
-  assert.equal(first.state.state.entries.length,2);
+  assert.equal(first.state.state.entries.length,207);
   assert.equal(first.state.state.goal,1200);
   assert.equal(first.state.state.cup.id,JSON.parse(original).cup.id);
   assert.equal(first.queued.length,0);
   assert.equal(await page.evaluate(()=>localStorage.getItem('water-king.state.v2')),original);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  // A cloud-side deletion is pulled as a tombstone and must not be recreated locally.
+  const remote=rows.get('record:cloud-existing');
+  rows.set('record:cloud-existing',{...remote,revision:remote.revision+1,cursor:String(++head),value:null});
+  await page.getByRole('button',{name:'立即同步',exact:true}).click();
+  await page.getByText('记录已同步',{exact:true}).waitFor();
+  assert.equal((await snapshot(page)).state.state.entries.some(e=>e.id==='cloud-existing'),false);
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await other.close();
   await context.setOffline(true);
@@ -114,21 +127,21 @@ try {
   await page.getByRole('button',{name:'嘬一口',exact:false}).click();
   await page.waitForTimeout(800);
   const offline = await snapshot(page);
-  assert.equal(offline.state.state.entries.length,3);
+  assert.equal(offline.state.state.entries.length,207);
   assert.equal(offline.queued.length,1);
   assert.equal(offline.state.state.cup.id,first.state.state.cup.id);
   await context.setOffline(false);
   await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByText('记录已同步',{exact:true}).waitFor();
   assert.equal((await snapshot(page)).queued.length,0);
-  assert.equal([...rows.values()].filter(row=>row.entity==='record'&&row.value!==null).length,3);
+  assert.equal([...rows.values()].filter(row=>row.entity==='record'&&row.value!==null).length,207);
   await buildApp('browser-update');
   await Promise.all([
     page.waitForURL(url=>url.searchParams.has('_refresh')),
     page.getByRole('button',{name:/刷新应用/}).click(),
   ]);
   await page.getByText('私人记录',{exact:true}).waitFor();
-  assert.equal((await snapshot(page)).state.state.entries.length,3);
+  assert.equal((await snapshot(page)).state.state.entries.length,207);
   await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByText(/browser-update/).waitFor();
   const freshAuth = await page.evaluate(()=>localStorage.getItem('sb-test-auth-token'));
@@ -173,7 +186,7 @@ try {
   assert.deepEqual({writes,pulls},before);
   await closedContext.close();
   assert.deepEqual(errors,[]);
-  console.log('PASS: explicit consent, cancel without upload, initial merge, cloud goal, independent cup, original data preserved, second-tab switch, offline reload and queued recording, reconnect upload, active update preserves data, expired Auth does not block offline records, closed production gate retains records without RPC, 320px layout.');
+  console.log('PASS: explicit consent, cancel without upload, initial merge with more than 200 mutations auto-continued, cloud deletion tombstones, cloud goal, independent cup, original data preserved, second-tab switch, offline reload and queued recording, reconnect upload, active update preserves data, expired Auth does not block offline records, explicit test-only disabled build retains records without RPC, 320px layout.');
 } finally {
   await browser.close();
   server.httpServer.closeAllConnections();

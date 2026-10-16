@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./models";
 import { cloudConfig } from "./config";
-export const cloudSyncEnabled = import.meta.env.VITE_CLOUD_SYNC_PREVIEW === "true";
+export const cloudSyncEnabled = import.meta.env.VITE_CLOUD_SYNC_PREVIEW !== "false";
 
 let client: SupabaseClient<Database> | null | undefined;
 export function getCloudClient() {

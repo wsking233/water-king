@@ -45,6 +45,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const writeEpoch = useRef(0);
   const signingOut = useRef(false);
+  const synchronizing = useRef(false);
 
   const notify = useCallback(() => { for (const callback of listeners.current) callback(); }, []);
   const subscribe = useCallback((listener: () => void) => {
@@ -55,7 +56,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   }, []);
   const synchronize = useCallback(async () => {
     const current = selectedRef.current;
-    if (signingOut.current || !cloudSyncEnabled || !current || current.session.owner === "local" || !worker.current) return;
+    if (synchronizing.current || signingOut.current || !cloudSyncEnabled || !current || current.session.owner === "local" || !worker.current) return;
     if (syncRef.current.status === "conflict" || syncRef.current.status === "expired") return;
     const account = current.session.owner;
     const startedAt = writeEpoch.current;
@@ -64,21 +65,41 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
         ? "身份尚未恢复，记录仅保存在本机。请先导出备份，再登录或创建新游客。"
         : "记录已保存在本机，联网后可同步" }); return;
     }
+    synchronizing.current = true;
+    let continueSync = false;
     setSync({ status: "syncing", message: "正在同步…本机仍可记录" });
     try {
       await createSyncTransport(setup.client!).status(account,new AbortController().signal);
       if(signingOut.current || selectedRef.current?.session!==current.session || owner.current!==account) return;
+      const repository = await db.current;
+      const cursorBefore = (await repository?.load(account))?.cursor;
       const result: SyncResult = await worker.current.run(account);
       if (selectedRef.current?.session !== current.session || owner.current !== account) return;
       if (result.status === "conflict") setSync({ status: "conflict", message: "发现不同版本，已暂停同步并保留本机改动。可先导出备份；不会自动覆盖任何一方。" });
       else if (result.status === "synced" && startedAt === writeEpoch.current) setSync({ status: "synced", message: "记录已同步" });
-      else setSync({ status: "pending", message: "本机仍有待同步记录，可再次同步" });
+      else {
+        const remaining = (await repository?.pending(account))?.length ?? 0;
+        const cursorAfter = (await repository?.load(account))?.cursor;
+        if (selectedRef.current?.session !== current.session || owner.current !== account) return;
+        continueSync = result.status !== "stopped" && (result.uploaded > 0 || cursorAfter !== cursorBefore
+          || (result.status === "synced" && startedAt !== writeEpoch.current));
+        setSync({ status: "pending", message: remaining
+          ? `记录已保存在本机，仍有 ${remaining} 项改动${continueSync ? "，正在继续同步…" : "等待同步"}`
+          : continueSync ? "正在继续获取云端记录…" : "同步已暂停，可稍后重试" });
+      }
     } catch (cause) {
       if (selectedRef.current?.session === current.session)
         setSync(guestExpiryMessage(cause) ? {status:"expired",message:guestExpiryMessage(cause)!}
           : { status: "error", message: "同步未完成，本机改动已保留。请联网后重试。" });
     } finally {
+      synchronizing.current = false;
       if (selectedRef.current?.session === current.session) { notify(); publish("sync"); }
+      const next = selectedRef.current;
+      if (!signingOut.current && next && owner.current === next.session.owner && next.session.owner !== "local"
+        && (continueSync || next.session !== current.session)) {
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => { if (!document.hidden && navigator.onLine) void synchronizeRef.current(); }, 300);
+      }
     }
   }, [notify, publish, setup]);
   const synchronizeRef = useRef(synchronize);
@@ -241,7 +262,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
 
   async function connect(preview: DataSnapshot, importLocal: boolean, expectedAccount: string, cancellation?: AbortSignal) {
     if (signingOut.current) throw Error("正在退出账号，请稍后重试");
-    if (!cloudSyncEnabled) throw Error("云同步仍在验证，暂未开放");
+    if (!cloudSyncEnabled) throw Error("当前构建已关闭云同步，本机记录不受影响");
     const account = owner.current;
     const source = selectedRef.current;
     const repository = await db.current;

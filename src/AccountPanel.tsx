@@ -34,7 +34,7 @@ function ConnectSheet({ preview, accountId, access, close }: { preview: DataSnap
       <span>合并本机记录<small>按记录 ID 去重；云端已删除的记录不恢复。保留本机杯子；云端已有每日目标时沿用云端目标。</small></span></label>
     <label className="sync-choice"><input type="radio" name="sync-import" checked={!importLocal} disabled={working} onChange={() => setImportLocal(false)} />
       <span>仅恢复云端记录<small>不上传原本机记录；此设备没有云端杯子时开始新杯。</small></span></label>
-    <p className="sheet-description">如果相同 ID 存在不同内容，将暂停接入并保留两边数据。账号绑定与 30 天过期清理仍在开发，请保留备份。</p>
+    <p className="sheet-description">如果相同 ID 存在不同内容，将暂停接入并保留两边数据。首次接入确认后才上传。未绑定游客连续 30 天未有效联网使用会过期，请保留备份。</p>
     {error && <p className="account-error" role="alert">{error}</p>}
     <button className="primary" disabled={working} onClick={async () => {
       setWorking(true); setError("");
@@ -190,12 +190,12 @@ export function AccountPanel({ access }: { access: DataAccess }) {
         setPreview({ snapshot, accountId: user.id });
       } catch { setError("本机数据暂时无法读取，尚未上传。"); }
     }}>设置云同步</button>}
-    {access.syncEnabled && access.session.owner !== "local" && <>
+    {access.syncEnabled && user && access.session.owner === user.id && <>
       <button className="primary" disabled={!online || access.sync.status === "syncing" || access.sync.status === "conflict" || access.sync.status === "expired"}
         onClick={() => void access.synchronize()}> {access.sync.status === "syncing" ? "正在同步…" : "立即同步"}</button>
       <p>全部记录默认私有。断网时先保存到本机，联网后补传。发生冲突时暂停同步，保留本机改动。</p>
     </>}
-    <p>邮箱绑定需完成邮件验证并设置密码。游客定时清理尚未启用，请保留备份。</p>
+    <p>游客也可同步，无需先绑定邮箱。绑定邮箱后可在其他设备登录恢复；未绑定游客连续 30 天未有效联网使用会过期。本机备份请自行保留。</p>
     {preview && <ConnectSheet preview={preview.snapshot} accountId={preview.accountId} access={access} close={() => setPreview(null)} />}
     {error && <>
       <p className="account-error" role="alert">{error}</p>

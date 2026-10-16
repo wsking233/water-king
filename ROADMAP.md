@@ -63,7 +63,7 @@
 
 ## 阶段 3：联网基础与用户系统（当前开发优先级，V0.2）
 
-当前先实现用户系统与私人数据云同步，再考虑成就及排行榜。使用 Supabase（托管 PostgreSQL、Auth、RLS），不自建 Express 服务。profiles 与私有同步协议已部署并验证隔离；账号基础、队列/Worker、异步页面与首次上传确认已开发，并通过模拟服务浏览器验证。`VITE_CLOUD_SYNC_PREVIEW` 默认关闭；真实 Auth、多设备、冲突解决界面、绑定及 30 天清理仍待完成。详细架构及阶段验收见 [V0.2 联网架构](docs/architecture/SYNC.md)，进度与阻塞见 [开发交接](docs/architecture/DEVELOPMENT_HANDOFF.md)。
+当前先实现用户系统与私人数据云同步，再考虑成就及排行榜。使用 Supabase（托管 PostgreSQL、Auth、RLS），不自建 Express 服务。profiles 与私有同步协议已部署并验证隔离；账号基础、队列/Worker、异步页面与首次上传确认已开发，并通过模拟服务浏览器验证。用户已要求开始数据上传同步，普通线上入口开放且保留首次确认；邮箱绑定已实测成功，真实多设备、冲突解决界面及 30 天清理仍待完成。详细架构及阶段验收见 [V0.2 联网架构](docs/architecture/SYNC.md)，进度与阻塞见 [开发交接](docs/architecture/DEVELOPMENT_HANDOFF.md)。
 
 最小范围：
 
