@@ -23,10 +23,15 @@ jobs:
       - run: npm run release:check
       - run: npm test
       - run: npm run test:lifecycle
+      - run: npm run test:leaderboard
       - run: npm run test:goal-history
       - run: git diff --exit-code -- supabase/lifecycle-upgrade.sql
       - name: Mobile sync and offline regression
         run: npm run test:browser
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+      - name: Mobile leaderboard regression
+        run: npm run test:leaderboard-browser
         env:
           CHROME_PATH: /usr/bin/google-chrome
       - name: Mobile email account regression

@@ -2277,3 +2277,42 @@ body {
 .conflict-option p { color: #527180; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
 
 .settings .danger-action { color: #a4665c; }
+
+/* Five compact touch targets keep navigation usable on 320px phones. */
+.tab-bar { grid-template-columns: repeat(5, 1fr); }
+.leaderboard-page { padding-bottom: 20px; }
+.leaderboard-disclosure { display:flex; align-items:flex-start; gap:9px; color:#58707a; font-size:12px; line-height:1.8; background:#eaf3f6; border-radius:16px; padding:14px; }
+.leaderboard-disclosure svg { flex-shrink:0; margin-top:3px; }
+.leaderboard-metrics { display:flex; gap:6px; overflow-x:auto; padding:10px 0; scrollbar-width:thin; }
+.leaderboard-metrics button { flex:0 0 auto; min-height:44px; padding:10px 13px; border-radius:14px; background:#edf1f1; color:#5f737c; font-size:13px; }
+.leaderboard-metrics button[aria-selected=true] { background:#d5eaf3; color:#254d60; font-weight:700; }
+.leaderboard-description { line-height:1.8; font-size:14px; color:#48616d; }
+.leaderboard-toolbar { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:20px; font-size:12px; color:#637983; }
+.leaderboard-toolbar button { display:flex; align-items:center; gap:6px; padding:8px; min-height:44px; color:#3f6577; }
+.leaderboard-time { font-size:11px; color:#6c8089; line-height:1.6; }
+.leaderboard-cache { color:#765d33; background:#f7efdf; padding:12px; border-radius:12px; font-size:12px; line-height:1.8; }
+.leaderboard-mine { display:flex; align-items:center; width:100%; gap:12px; border:1px solid #cde2eb; padding:16px; border-radius:18px; background:#e8f3f7; color:#3e6576; text-align:left; margin:18px 0; }
+.leaderboard-mine strong,.leaderboard-mine small { display:block; }
+.leaderboard-mine small { margin-top:6px; font-size:12px; line-height:1.6; }
+.leaderboard-list { list-style:none; margin:0; padding:0; background:#fff; border-radius:18px; overflow:hidden; }
+.leaderboard-list li { display:flex; gap:12px; align-items:center; padding:17px 12px; border-bottom:1px solid #eff2f3; min-height:72px; }
+.leaderboard-rank { flex:0 0 28px; text-align:center; font-weight:700; color:#7a8c93; font-variant-numeric:tabular-nums; }
+.leaderboard-rank.leading { background:#e1eef4; border-radius:10px; padding:7px 0; color:#376179; }
+.leaderboard-person { flex:1; min-width:0; }
+.leaderboard-person strong { display:block; overflow-wrap:anywhere; font-size:14px; color:#304e5c; }
+.leaderboard-person small { display:block; margin-top:5px; font-size:11px; color:#7d8a91; }
+.leaderboard-score { flex-shrink:0; color:#385969; font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; }
+.leaderboard-score small { display:block; text-align:right; font-weight:400; font-size:10px; color:#788a93; margin-top:3px; }
+.leaderboard-empty { text-align:center; padding:36px 16px; color:#70848d; font-size:13px; line-height:1.8; }
+.leaderboard-empty svg { color:#87a9b9; }
+.leaderboard-empty h2 { font-size:17px; }
+.leaderboard-more { width:100%; margin-top:16px; }
+.leaderboard-privacy { padding:14px; }
+.leaderboard-privacy p { font-size:12px; line-height:1.8; color:#647b86; }
+.leaderboard-privacy button { min-height:60px; width:100%; display:flex; justify-content:space-between; align-items:center; text-align:left; gap:10px; }
+.leaderboard-privacy button strong,.leaderboard-privacy button small { display:block; }
+.leaderboard-privacy button small { font-size:12px; color:#7a8a91; margin-top:5px; }
+.leaderboard-switch { flex-shrink:0; width:42px; height:26px; border-radius:20px; background:#c6ced1; padding:3px; }
+.leaderboard-switch::after { content:""; display:block; height:20px; width:20px; border-radius:50%; background:white; }
+.leaderboard-switch.on { background:#6293a7; }
+.leaderboard-switch.on::after { transform:translateX(16px); }

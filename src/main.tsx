@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Trophy,
   Droplet,
   Waves,
   Plus,
@@ -52,10 +53,11 @@ import { CupControl } from "./CupControl";
 import { AboutApp } from "./AboutApp";
 import { appVersion } from "./build";
 import { EmailAuthProvider } from "./EmailAuthSheet";
+import { Leaderboard, LeaderboardPrivacy } from "./Leaderboard";
 import { AccountPanel } from "./AccountPanel";
 import { DataGate, type DataAccess } from "./DataGate";
 const labels = { water: "喝水", small: "嘘嘘" };
-type Tab = "today" | "history" | "review" | "me";
+type Tab = "today" | "history" | "review" | "leaderboard" | "me";
 type Sheet =
   "edit" | "import" | Kind | "goal" | "clear" | Entry | RecordGroup | null;
 function Icon({ kind }: { kind: Kind }) {
@@ -806,6 +808,7 @@ function App({ access }: { access: DataAccess }) {
             </p>
           </>
         )}
+        {tab === "leaderboard" && <Leaderboard owner={access.session.owner} openAccount={() => navigate("me")} />}
         {tab === "me" && (
           <>
             <section className="page-heading">
@@ -823,6 +826,7 @@ function App({ access }: { access: DataAccess }) {
               </div>
             </section>
             <AccountPanel access={access} />
+            <LeaderboardPrivacy owner={access.session.owner} />
             <h2 className="settings-section-title">日常设置</h2>
             <section className="settings">
               <div>
@@ -927,6 +931,7 @@ function App({ access }: { access: DataAccess }) {
           { id: "today", label: "今天", icon: GlassWater },
           { id: "history", label: "记录", icon: History },
           { id: "review", label: "回顾", icon: BarChart3 },
+          { id: "leaderboard", label: "排行", icon: Trophy },
           { id: "me", label: "我的", icon: UserRound },
         ].map((item) => (
           <button

@@ -30,7 +30,7 @@ function ConnectSheet({ preview, accountId, access, close }: { preview: DataSnap
     <h2 id="connect-title">接入私人云同步</h2>
     <p className="sheet-description account-id">目标账号：{accountId}</p>
     <p className="sheet-description">本机有 {preview.state.entries.length} 条记录：约 {totals(preview.state.entries).water} ml 饮水、{totals(preview.state.entries).small} 次嘘嘘。当前杯容量 {preview.state.cup.capacity} ml。</p>
-    <p className="sheet-description">饮水、嘘嘘和每日目标仅本人可访问。当前杯子按设备独立；原本机数据保留，不会因本次接入而删除。</p>
+    <p className="sheet-description">原始饮水、嘘嘘和每日目标仅本人可访问。云端账号默认公开排行榜昵称与聚合成绩，可在排行榜隐私中退出。当前杯子按设备独立；原本机数据保留。</p>
     <label className="sync-choice"><input type="radio" name="sync-import" checked={importLocal} disabled={working} onChange={() => setImportLocal(true)} />
       <span>合并本机记录<small>按记录 ID 去重；云端已删除的记录不恢复。保留本机杯子；云端已有每日目标时沿用云端目标。</small></span></label>
     <label className="sync-choice"><input type="radio" name="sync-import" checked={!importLocal} disabled={working} onChange={() => setImportLocal(false)} />
