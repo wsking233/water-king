@@ -18,6 +18,7 @@ export type DataAccess = {
   changed: () => void;
   subscribe: (listener: () => void) => () => void;
   synchronize: () => Promise<void>;
+  signOut: (expectedAccount: string) => Promise<void>;
   connect: (preview: DataSnapshot, importLocal: boolean, expectedAccount: string, signal?: AbortSignal) => Promise<void>;
 };
 
@@ -28,6 +29,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   });
   const [selected, setSelected] = useState<{ session: DataSession; initial: DataSnapshot } | null>(null);
   const [error, setError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [sync, setSync] = useState<SyncView>({ status: "local", message: "记录仅保存在本机" });
   const syncRef = useRef(sync);
   syncRef.current = sync;
@@ -42,6 +44,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   const generation = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const writeEpoch = useRef(0);
+  const signingOut = useRef(false);
 
   const notify = useCallback(() => { for (const callback of listeners.current) callback(); }, []);
   const subscribe = useCallback((listener: () => void) => {
@@ -52,7 +55,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   }, []);
   const synchronize = useCallback(async () => {
     const current = selectedRef.current;
-    if (!cloudSyncEnabled || !current || current.session.owner === "local" || !worker.current) return;
+    if (signingOut.current || !cloudSyncEnabled || !current || current.session.owner === "local" || !worker.current) return;
     if (syncRef.current.status === "conflict" || syncRef.current.status === "expired") return;
     const account = current.session.owner;
     const startedAt = writeEpoch.current;
@@ -64,7 +67,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
     setSync({ status: "syncing", message: "正在同步…本机仍可记录" });
     try {
       await createSyncTransport(setup.client!).status(account,new AbortController().signal);
-      if(selectedRef.current?.session!==current.session || owner.current!==account) return;
+      if(signingOut.current || selectedRef.current?.session!==current.session || owner.current!==account) return;
       const result: SyncResult = await worker.current.run(account);
       if (selectedRef.current?.session !== current.session || owner.current !== account) return;
       if (result.status === "conflict") setSync({ status: "conflict", message: "发现不同版本，已暂停同步并保留本机改动。可先导出备份；不会自动覆盖任何一方。" });
@@ -147,6 +150,10 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
     const recoverCached = async () => {
       try {
         const repository = await db.current;
+        if (disposed || owner.current !== null) return;
+        if (localStorage.getItem("water-king.signed-out.v1") === "true") {
+          offlineView.current = null; await select(null); return;
+        }
         const cached = await repository?.lastOwner();
         if (disposed || owner.current !== null) return;
         const previous = selectedRef.current?.session.owner;
@@ -168,8 +175,13 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
         owner.current = next;
         // Token refresh alone is not user activity and must not renew a guest.
         if(!shouldRestoreIdentity(previous,next,_event)) return;
-        if (next) { offlineView.current = null; void select(next); }
-        else { worker.current?.cancel(); void recoverCached(); }
+        if (next) { setAuthNotice(""); localStorage.removeItem("water-king.signed-out.v1"); offlineView.current = null; void select(next); }
+        else if (_event === "SIGNED_OUT" && (localStorage.getItem("water-king.logout-intent.v1")
+          || localStorage.getItem("water-king.signed-out.v1") === "true")) {
+          localStorage.setItem("water-king.signed-out.v1", "true");
+          offlineView.current = null; worker.current?.cancel(); clearTimeout(timer.current);
+          void select(null);
+        } else { worker.current?.cancel(); void recoverCached(); }
       });
       unsubscribe = () => subscription.unsubscribe();
       // A storage/refresh error must still leave the original local mode usable.
@@ -203,7 +215,32 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
     });
   }, [setup, selected]);
 
+  async function signOut(expectedAccount: string) {
+    if (!setup.client || signingOut.current) throw Error("账号服务暂时不可用");
+    signingOut.current = true;
+    worker.current?.cancel(); clearTimeout(timer.current);
+    try {
+      const { data, error } = await setup.client.auth.getSession();
+      if (error) throw error;
+      if (data.session?.user.id !== expectedAccount) throw Error("账号已变化，请重新操作");
+      const intent = crypto.randomUUID();
+      localStorage.setItem("water-king.logout-intent.v1", intent);
+      try {
+        const result = await setup.client.auth.signOut({ scope: "local" });
+        if (result.error) {
+          const remaining = await setup.client.auth.getSession();
+          if (remaining.data.session) throw result.error;
+          setAuthNotice("已退出此浏览器，但服务端会话撤销尚未确认。账号数据已保留；请勿在共用设备保留浏览器数据。");
+        }
+      } finally {
+        if (localStorage.getItem("water-king.logout-intent.v1") === intent)
+          localStorage.removeItem("water-king.logout-intent.v1");
+      }
+    } finally { signingOut.current = false; }
+  }
+
   async function connect(preview: DataSnapshot, importLocal: boolean, expectedAccount: string, cancellation?: AbortSignal) {
+    if (signingOut.current) throw Error("正在退出账号，请稍后重试");
     if (!cloudSyncEnabled) throw Error("云同步仍在验证，暂未开放");
     const account = owner.current;
     const source = selectedRef.current;
@@ -246,7 +283,7 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   }
   if (!selected) return <main className="app"><p role="status">{error || "正在读取本机记录…"}</p>
     {error && <button onClick={() => window.location.reload()}>重新打开</button>}</main>;
-  return <>{setup.error && <p role="alert">{setup.error}</p>}{children({ ...selected, syncEnabled: cloudSyncEnabled, sync, changed,
+  return <>{authNotice && <p role="alert">{authNotice}</p>}{setup.error && <p role="alert">{setup.error}</p>}{children({ ...selected, syncEnabled: cloudSyncEnabled, sync, changed,
     subscribe,
-    synchronize, connect })}</>;
+    synchronize, signOut, connect })}</>;
 }

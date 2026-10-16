@@ -18,6 +18,7 @@ try {
   const context=await browser.newContext({viewport:{width:320,height:740},isMobile:true,hasTouch:true});
   const errors=[]; context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));
   let user={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',aud:'authenticated',role:'authenticated',is_anonymous:true,app_metadata:{},user_metadata:{},identities:[],created_at:new Date().toISOString()};
+  let failLogout=true; let logoutCalls=0; let loginTarget='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const mutations=[]; const verifications=[]; let recoveries=0;
   const session=()=>{
     const b64=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
@@ -26,6 +27,10 @@ try {
   await context.route('https://*.supabase.co/**',async route=>{
     const req=route.request(), url=new URL(req.url());
     const ok=x=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(x)});
+    if(url.pathname.endsWith('/logout')) {
+      logoutCalls++; assert.equal(url.searchParams.get('scope'),'local');
+      return failLogout ? route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({msg:'temporary failure'})}) : ok({});
+    }
     if(url.pathname.endsWith('/signup')) return ok(session());
     if(url.pathname.endsWith('/user')) {
       if(req.method()==='PUT') { const data=req.postDataJSON(); mutations.push(data); }
@@ -40,7 +45,7 @@ try {
     if(url.pathname.endsWith('/recover')) {recoveries++;return ok({});}
     if(url.pathname.endsWith('/token')) {
       if(req.postDataJSON().password==='wrong') return route.fulfill({status:400,headers:{'x-supabase-api-version':'2024-01-01','access-control-expose-headers':'X-Supabase-Api-Version'},contentType:'application/json',body:JSON.stringify({code:'invalid_credentials',msg:'Invalid login credentials'})});
-      user={...user,id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',is_anonymous:false,email:'test@example.com',email_confirmed_at:new Date().toISOString()};
+      user={...user,id:loginTarget,is_anonymous:false,email:'test@example.com',email_confirmed_at:new Date().toISOString()};
       return ok(session());
     }
     if(url.pathname.includes('/profiles')) {
@@ -114,8 +119,60 @@ try {
   await page.goto(origin);
   await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByRole('button',{name:'邮箱密码登录',exact:true}).waitFor();
+  await page.getByRole('button',{name:'今天',exact:true}).click();
+  await page.getByRole('button',{name:'嘬一口',exact:false}).click();
+  const retained=await page.evaluate(async()=>{
+    const db=await new Promise(resolve=>{const q=indexedDB.open('water-king.sync.v1');q.onsuccess=()=>resolve(q.result)});
+    const tx=db.transaction(['snapshots','outbox'],'readonly');
+    const state=await new Promise(resolve=>{const q=tx.objectStore('snapshots').get('cccccccc-cccc-4ccc-8ccc-cccccccccccc');q.onsuccess=()=>resolve(q.result)});
+    const queue=await new Promise(resolve=>{const q=tx.objectStore('outbox').getAll();q.onsuccess=()=>resolve(q.result)});
+    db.close();return {state,queue};
+  });
+  assert.equal(retained.queue.length,1);
+  await page.getByRole('button',{name:'我的',exact:true}).click();
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  await sheet.getByRole('button',{name:'取消，保留当前登录'}).click();
+  assert.equal(logoutCalls,0);
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  await sheet.getByRole('button',{name:'确认退出',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'服务端会话撤销尚未确认'}).waitFor();
+  await page.getByRole('button',{name:'我的',exact:true}).click();
+  await page.getByRole('button',{name:'游客登录',exact:true}).waitFor();
+  loginTarget='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  await page.getByRole('button',{name:'邮箱密码登录',exact:true}).click();
+  await sheet.getByLabel('邮箱',{exact:true}).fill('test@example.com');
+  await sheet.getByLabel('密码',{exact:true}).fill('recovered-password');
+  await sheet.getByRole('button',{name:'登录并切换账号'}).click();
+  await sheet.getByRole('button',{name:'完成',exact:true}).click();
+  await page.getByRole('button',{name:'我的',exact:true}).click();
+  failLogout=false;
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  await sheet.getByRole('button',{name:'确认退出',exact:true}).click();
+  await page.getByRole('button',{name:'我的',exact:true}).click();
+  await page.getByRole('button',{name:'游客登录',exact:true}).waitFor();
+  await page.reload();
+  await page.getByRole('button',{name:'我的',exact:true}).click();
+  await page.getByRole('button',{name:'游客登录',exact:true}).waitFor();
+  assert.equal(await page.getByText('私人记录',{exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('water-king.state.v2')),before);
+  loginTarget='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  await page.getByRole('button',{name:'邮箱密码登录',exact:true}).click();
+  await sheet.getByLabel('邮箱',{exact:true}).fill('test@example.com');
+  await sheet.getByLabel('密码',{exact:true}).fill('recovered-password');
+  await sheet.getByRole('button',{name:'登录并切换账号'}).click();
+  await sheet.getByRole('button',{name:'完成',exact:true}).click();
+  await page.getByText('私人记录',{exact:true}).waitFor();
+  const restored=await page.evaluate(async()=>{
+    const db=await new Promise(resolve=>{const q=indexedDB.open('water-king.sync.v1');q.onsuccess=()=>resolve(q.result)});
+    const tx=db.transaction(['snapshots','outbox'],'readonly');
+    const state=await new Promise(resolve=>{const q=tx.objectStore('snapshots').get('cccccccc-cccc-4ccc-8ccc-cccccccccccc');q.onsuccess=()=>resolve(q.result)});
+    const queue=await new Promise(resolve=>{const q=tx.objectStore('outbox').getAll();q.onsuccess=()=>resolve(q.result)});
+    db.close();return {state,queue};
+  });
+  assert.deepEqual(restored,retained);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('water-king.signed-out.v1')),null);
   assert.deepEqual(errors,[]);
-  console.log('PASS: 320px email binding retains ID; invalid OTP and password mismatch block updates; password login errors preserve identity; account switch retains local records; recovery survives account-view replacement and uses recovery OTP; no real Auth or email requests.');
+  console.log('PASS: 320px email binding retains ID; invalid OTP and password mismatch block updates; password login errors preserve identity; account switch retains local records; recovery survives account-view replacement and uses recovery OTP; logout cancellation/failure/success, reload hides old account and re-login restores unchanged queue; no real Auth or email requests.');
 } finally {
   await browser?.close();
   if(server){server.httpServer.closeAllConnections();await new Promise(resolve=>server.httpServer.close(resolve));}

@@ -5,6 +5,7 @@ import { defaultNickname, enterGuest, loadProfile } from "./cloud/identity";
 import type { DataAccess } from "./DataGate";
 import type { DataSnapshot } from "./dataSession";
 import { totals } from "./records";
+import { SignOutSheet } from "./SignOutSheet";
 import { useEmailAuth, type EmailAction } from "./EmailAuthSheet";
 import { guestExpiryMessage } from "./cloud/lifecycle";
 
@@ -63,6 +64,7 @@ export function AccountPanel({ access }: { access: DataAccess }) {
   const showEmailAction = (action: EmailAction) => {
     if (setup.client) openEmailAuth({ client: setup.client, action, accountId: user?.id ?? null });
   };
+  const [signOutTarget, setSignOutTarget] = useState<{ id: string; anonymous: boolean } | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const currentId = useRef<string | null>(null);
 
@@ -176,7 +178,9 @@ export function AccountPanel({ access }: { access: DataAccess }) {
       {user && !user.is_anonymous && <button disabled={!online || busy} onClick={() => showEmailAction("password")}>设置或修改密码</button>}
       <button disabled={!online || busy} onClick={() => showEmailAction("login")}>邮箱密码登录</button>
       <button disabled={!online || busy} onClick={() => showEmailAction("recover")}>找回密码</button>
+      {user && <button disabled={!online || busy} onClick={() => setSignOutTarget({ id: user.id, anonymous: user.is_anonymous === true })}>退出登录</button>}
     </div>}
+    {signOutTarget && <SignOutSheet access={access} accountId={signOutTarget.id} anonymous={signOutTarget.anonymous} close={() => setSignOutTarget(null)} />}
     <p role="status">{access.sync.message}</p>
     {!access.syncEnabled && <p>云同步正在准备中。当前仍可在本机记录和导出备份。</p>}
     {access.syncEnabled && user && access.session.owner === "local" && <button className="primary" disabled={busy || !online} onClick={async () => {
