@@ -49,7 +49,8 @@ import {
   weekSummary,
 } from "./dataTools";
 import { CupControl } from "./CupControl";
-import { appBuild } from "./build";
+import { AboutApp } from "./AboutApp";
+import { appVersion } from "./build";
 import { EmailAuthProvider } from "./EmailAuthSheet";
 import { AccountPanel } from "./AccountPanel";
 import { DataGate, type DataAccess } from "./DataGate";
@@ -129,6 +130,7 @@ function App({ access }: { access: DataAccess }) {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [editorDate, setEditorDate] = useState(new Date());
   const [reviewKind, setReviewKind] = useState<Kind>("water");
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const offline = useOfflineApp();
   async function refreshApp() {
@@ -810,12 +812,7 @@ function App({ access }: { access: DataAccess }) {
               <p>照顾自己，是件小事</p>
               <h1>我的</h1>
             </section>
-            <section className="profile">
-              <span className="profile-icon">
-                <Waves size={36} />
-              </span>
-              <h2>自己的节奏，就很好</h2>
-              <p>不比较，不赶路，慢慢养成习惯。</p>
+            <section className="profile-summary" aria-label="记录概况">
               <div className="profile-stats">
                 <span>
                   <strong>{days}</strong>记录天数
@@ -826,12 +823,13 @@ function App({ access }: { access: DataAccess }) {
               </div>
             </section>
             <AccountPanel access={access} />
+            <h2 className="settings-section-title">日常设置</h2>
             <section className="settings">
               <div>
                 <ShieldCheck />
                 <span>
                   <strong>{access.session.owner === "local" ? "数据留在你的设备" : "私人数据云同步"}</strong>
-                  <small>{access.session.owner === "local" ? "饮水与嘘嘘记录尚未上传" : "仅本人可访问，杯子按设备独立"}</small>
+                  <small>{access.session.owner === "local" ? "当前使用独立的本机记录" : "仅本人可访问，杯子按设备独立"}</small>
                 </span>
               </div>
               <button
@@ -860,18 +858,9 @@ function App({ access }: { access: DataAccess }) {
                 </span>
                 <ChevronRight size={18} />
               </button>
-              <button
-                className="refresh-app"
-                onClick={refreshApp}
-                disabled={refreshing || saving}
-              >
-                <RefreshCw className={refreshing ? "refresh-spinning" : ""} />
-                <span>
-                  <strong>{refreshing ? "正在刷新…" : "刷新应用"}</strong>
-                  <small>重新加载页面，保留本机记录</small>
-                </span>
-                <ChevronRight size={18} />
-              </button>
+            </section>
+            <h2 className="settings-section-title">数据与备份</h2>
+            <section className="settings">
               <button
                 className="preference"
                 disabled={blocked || saving}
@@ -886,6 +875,7 @@ function App({ access }: { access: DataAccess }) {
               </button>
               <button
                 className="preference"
+                disabled={blocked || saving}
                 onClick={() => fileInput.current?.click()}
               >
                 <Upload />
@@ -907,7 +897,7 @@ function App({ access }: { access: DataAccess }) {
                   if (file) void importData(file);
                 }}
               />
-              <button onClick={() => open("clear")}>
+              <button className="danger-action" disabled={blocked || saving} onClick={() => open("clear")}>
                 <Trash2 />
                 <span>清空所有记录</span>
                 <ChevronRight size={18} />
@@ -920,13 +910,15 @@ function App({ access }: { access: DataAccess }) {
             <p className="settings-note">
               清除浏览器数据后，记录也会消失。
               <br />
-              不同设备或浏览器之间不会同步。
+              {access.session.owner === "local" ? "接入云同步后，可在登录同一账号的设备恢复记录。" : "已同步的记录可在同一账号恢复；尚未同步的改动仅在此设备。"}
             </p>
-            <div className="app-signature">
-              <Waves size={22} />
-              <span>大水之王 · 用心记录日常</span>
-              <small>当前版本 · {appBuild}</small>
-            </div>
+            <h2 className="settings-section-title">关于应用</h2>
+            <section className="settings app-about">
+              <button className="preference" onClick={() => setAboutOpen(true)}><Waves/><span><strong>水王 v{appVersion}</strong><small>版本说明与检查更新</small></span><ChevronRight size={18}/></button>
+              <button className="refresh-app" onClick={refreshApp} disabled={refreshing || saving}><RefreshCw className={refreshing ? "refresh-spinning" : ""}/><span><strong>{refreshing ? "正在刷新…" : "刷新应用"}</strong><small>{offline.available ? "已有应用更新，点击安装并保留记录" : "重新加载页面，保留本机记录"}</small></span><ChevronRight size={18}/></button>
+            </section>
+            <p className="app-signature">用心记录日常 · v{appVersion}</p>
+            {aboutOpen && <AboutApp close={() => setAboutOpen(false)} refresh={() => void refreshApp()} disabled={saving || refreshing}/>}
           </>
         )}
       </main>

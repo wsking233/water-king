@@ -5,6 +5,7 @@ import { defaultNickname, enterGuest, loadProfile } from "./cloud/identity";
 import type { DataAccess } from "./DataGate";
 import type { DataSnapshot } from "./dataSession";
 import { totals } from "./records";
+import { ConflictSheet } from "./ConflictSheet";
 import { SignOutSheet } from "./SignOutSheet";
 import { useEmailAuth, type EmailAction } from "./EmailAuthSheet";
 import { guestExpiryMessage } from "./cloud/lifecycle";
@@ -64,6 +65,7 @@ export function AccountPanel({ access }: { access: DataAccess }) {
   const showEmailAction = (action: EmailAction) => {
     if (setup.client) openEmailAuth({ client: setup.client, action, accountId: user?.id ?? null });
   };
+  const [conflictPreview, setConflictPreview] = useState<DataSnapshot | null>(null);
   const [signOutTarget, setSignOutTarget] = useState<{ id: string; anonymous: boolean } | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const currentId = useRef<string | null>(null);
@@ -153,11 +155,12 @@ export function AccountPanel({ access }: { access: DataAccess }) {
     } finally { setBusy(false); }
   }
 
-  return <section className="account-card" aria-labelledby="account-heading">
+  return <><section className="account-card" aria-labelledby="account-heading">
     <h2 id="account-heading">我的账号</h2>
     {!ready ? <p role="status">正在恢复身份…</p> : !setup.client ?
       <p>账号服务暂未配置，仍可继续本机记录。</p> : user ? <>
-        <p><strong>{nickname || defaultNickname(user.id)}</strong> · {user.is_anonymous ? "游客" : "已登录"}</p>
+        <div className="account-identity"><span className="account-avatar">{Array.from(nickname || "水")[0]}</span><div><strong>{nickname || defaultNickname(user.id)}</strong><p>{user.is_anonymous ? "游客账号 · 可随时绑定邮箱" : user.email || "邮箱账号"}</p></div><span className="identity-badge">{user.is_anonymous ? "游客" : "已绑定"}</span></div>
+        <details key={user.id} className="account-profile"><summary>账号资料与昵称</summary>
         <p className="account-id">用户 ID：{user.id}</p>
         <label htmlFor="account-nickname">昵称</label>
         <div className="account-edit">
@@ -166,6 +169,7 @@ export function AccountPanel({ access }: { access: DataAccess }) {
             disabled={busy || !online || !nickname} autoComplete="nickname" />
           <button onClick={saveNickname} disabled={busy || !online || !nickname || draft.trim() === nickname}>保存</button>
         </div>
+        </details>
         {user.is_anonymous && <p>游客身份保存在当前浏览器。清除网站数据或更换设备后，无法找回未绑定账号。</p>}
       </> : <>
         <p>无需填写邮箱或密码，可选择创建游客身份。</p>
@@ -181,7 +185,15 @@ export function AccountPanel({ access }: { access: DataAccess }) {
       {user && <button disabled={!online || busy} onClick={() => setSignOutTarget({ id: user.id, anonymous: user.is_anonymous === true })}>退出登录</button>}
     </div>}
     {signOutTarget && <SignOutSheet access={access} accountId={signOutTarget.id} anonymous={signOutTarget.anonymous} close={() => setSignOutTarget(null)} />}
+    {error && <><p className="account-error" role="alert">{error}</p>{user && <button disabled={!online || busy} onClick={() => setProfileRetry(n => n + 1)}>重新读取昵称</button>}</>}
+    {message && <p role="status">{message}</p>}
+    </section>
+    <section className="account-card sync-card" aria-labelledby="sync-heading">
+    <div className="sync-heading"><h2 id="sync-heading">云同步</h2><span className={`sync-badge sync-${access.sync.status}`}>{({local:"仅本机",pending:"待同步",syncing:"同步中",synced:"已同步",conflict:"需处理",expired:"已过期",error:"未完成"})[access.sync.status]}</span></div>
     <p role="status">{access.sync.message}</p>
+    {access.session.owner !== "local" && <dl className="sync-facts"><div><dt>待同步改动</dt><dd>{access.details.pending === null ? "正在读取" : `${access.details.pending} 项`}</dd></div><div><dt>最近同步成功</dt><dd>{access.details.lastSyncedAt ? new Date(access.details.lastSyncedAt).toLocaleString("zh-CN", {hour12:false}) : "暂无成功记录"}</dd></div></dl>}
+    {access.conflict?.mutation.owner === access.session.owner && access.sync.status === "conflict" && <button className="primary" onClick={async () => { try { const snapshot=await access.session.read(); if(snapshot.error)throw Error(snapshot.error);setConflictPreview(snapshot); } catch {setError("冲突内容暂时无法读取，请重试。");} }}>处理同步冲突</button>}
+    {conflictPreview && access.conflict?.mutation.owner === access.session.owner && <ConflictSheet access={access} preview={conflictPreview} close={() => setConflictPreview(null)} />}
     {!access.syncEnabled && <p>云同步正在准备中。当前仍可在本机记录和导出备份。</p>}
     {access.syncEnabled && user && access.session.owner === "local" && <button className="primary" disabled={busy || !online} onClick={async () => {
       try {
@@ -195,12 +207,7 @@ export function AccountPanel({ access }: { access: DataAccess }) {
         onClick={() => void access.synchronize()}> {access.sync.status === "syncing" ? "正在同步…" : "立即同步"}</button>
       <p>全部记录默认私有。断网时先保存到本机，联网后补传。发生冲突时暂停同步，保留本机改动。</p>
     </>}
-    <p>游客也可同步，无需先绑定邮箱。绑定邮箱后可在其他设备登录恢复；未绑定游客连续 30 天未有效联网使用会过期。本机备份请自行保留。</p>
+    <details className="sync-help"><summary>同步与隐私说明</summary><p>游客也可同步，无需先绑定邮箱。记录和目标默认私有；杯子按设备独立。绑定邮箱后可在其他设备登录恢复。未绑定游客连续 30 天未有效联网使用会过期，请保留备份。</p></details>
     {preview && <ConnectSheet preview={preview.snapshot} accountId={preview.accountId} access={access} close={() => setPreview(null)} />}
-    {error && <>
-      <p className="account-error" role="alert">{error}</p>
-      {user && <button disabled={!online || busy} onClick={() => setProfileRetry((n) => n + 1)}>重新读取昵称</button>}
-    </>}
-    {message && <p role="status">{message}</p>}
-  </section>;
+  </section></>;
 }

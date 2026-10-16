@@ -60,6 +60,7 @@ try {
   const before=await page.evaluate(()=>localStorage.getItem('water-king.state.v2'));
   await page.getByRole('button',{name:'我的',exact:true}).click();
   await page.getByRole('button',{name:'游客登录',exact:true}).click();
+  await page.getByText('账号资料与昵称',{exact:true}).click();
   await page.getByText('用户 ID：aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',{exact:true}).waitFor();
   await page.getByRole('button',{name:'绑定邮箱',exact:true}).click();
   let sheet=page.getByRole('dialog');
@@ -92,6 +93,7 @@ try {
   await sheet.getByLabel('密码',{exact:true}).fill('correct-password');
   await sheet.getByRole('button',{name:'登录并切换账号'}).click();
   await sheet.getByRole('button',{name:'完成',exact:true}).click();
+  await page.getByText('账号资料与昵称',{exact:true}).click();
   await page.getByText('用户 ID：bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>localStorage.getItem('water-king.state.v2')),before);
   await page.evaluate(async original=>{

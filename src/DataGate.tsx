@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cloudSyncEnabled, getCloudClient } from "./cloud/client";
 import { createSyncTransport } from "./cloud/syncTransport";
 import { DataSession, localWriteLock, type DataSnapshot } from "./dataSession";
-import { SyncRepository } from "./syncRepository";
+import { SyncRepository, type Mutation } from "./syncRepository";
 import { SyncWorker, type SyncResult } from "./syncWorker";
 import { parsePage, type RemoteChange } from "./syncProtocol";
 import { newCup } from "./records";
@@ -18,6 +18,9 @@ export type DataAccess = {
   changed: () => void;
   subscribe: (listener: () => void) => () => void;
   synchronize: () => Promise<void>;
+  details: { pending: number | null; lastSyncedAt: string | null };
+  conflict: { mutation: Mutation; current: RemoteChange | null } | null;
+  resolveConflict: (choice: "local" | "remote", preview: DataSnapshot) => Promise<void>;
   signOut: (expectedAccount: string) => Promise<void>;
   connect: (preview: DataSnapshot, importLocal: boolean, expectedAccount: string, signal?: AbortSignal) => Promise<void>;
 };
@@ -29,6 +32,8 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
   });
   const [selected, setSelected] = useState<{ session: DataSession; initial: DataSnapshot } | null>(null);
   const [error, setError] = useState("");
+  const [details, setDetails] = useState<{pending:number|null;lastSyncedAt:string|null}>({pending:null,lastSyncedAt:null});
+  const [conflict, setConflict] = useState<{mutation:Mutation;current:RemoteChange|null}|null>(null);
   const [authNotice, setAuthNotice] = useState("");
   const [sync, setSync] = useState<SyncView>({ status: "local", message: "记录仅保存在本机" });
   const syncRef = useRef(sync);
@@ -75,8 +80,14 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
       const cursorBefore = (await repository?.load(account))?.cursor;
       const result: SyncResult = await worker.current.run(account);
       if (selectedRef.current?.session !== current.session || owner.current !== account) return;
-      if (result.status === "conflict") setSync({ status: "conflict", message: "发现不同版本，已暂停同步并保留本机改动。可先导出备份；不会自动覆盖任何一方。" });
-      else if (result.status === "synced" && startedAt === writeEpoch.current) setSync({ status: "synced", message: "记录已同步" });
+      if (result.status === "conflict") { setConflict({mutation:result.mutation,current:result.conflict.current}); setSync({ status: "conflict", message: "发现不同版本，已暂停同步并保留本机改动。可先导出备份；不会自动覆盖任何一方。" }); }
+      else if (result.status === "synced" && startedAt === writeEpoch.current) {
+        await repository?.markSynced(account);
+        if (selectedRef.current?.session !== current.session || owner.current !== account) return;
+        setConflict(null);
+        if (startedAt === writeEpoch.current) setSync({ status: "synced", message: "记录已同步" });
+        else { continueSync = true; setSync({status:"pending",message:"新改动已保存在本机，正在继续同步…"}); }
+      }
       else {
         const remaining = (await repository?.pending(account))?.length ?? 0;
         const cursorAfter = (await repository?.load(account))?.cursor;
@@ -236,6 +247,36 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
     });
   }, [setup, selected]);
 
+  useEffect(() => {
+    let active = true;
+    const account = selected?.session.owner;
+    setDetails({pending:null,lastSyncedAt:null});
+    if (account && account !== "local") void db.current.then(async repository => {
+      if (!repository) return;
+      const [pending, lastSyncedAt] = await Promise.all([repository.pending(account), repository.lastSyncedAt(account)]);
+      if (active) setDetails({pending:pending.length,lastSyncedAt});
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [selected, sync]);
+
+  async function resolveConflict(choice: "local" | "remote", preview: DataSnapshot) {
+    const reviewed = conflict;
+    const repository = await db.current;
+    const session = selectedRef.current?.session;
+    if (!reviewed || !repository || !session || session.owner !== reviewed.mutation.owner
+      || owner.current !== session.owner || preview.error) throw Error("账号或冲突已变化，请重新查看。");
+    const resolve = async () => {
+      if (owner.current !== session.owner || selectedRef.current?.session !== session) throw Error("账号已变化");
+      await repository.resolveConflict(session.owner,reviewed.mutation.mutationId,reviewed.current,choice,preview.version);
+    };
+    if (navigator.locks) await navigator.locks.request(`water-king.sync:${session.owner}`,resolve);
+    else await resolve();
+    if (owner.current !== session.owner || selectedRef.current?.session !== session) return;
+    setConflict(null); setSync({status:"pending",message:"选择已保存在本机，等待同步确认"});
+    notify(); publish("write");
+    clearTimeout(timer.current); timer.current = setTimeout(() => void synchronizeRef.current(),300);
+  }
+
   async function signOut(expectedAccount: string) {
     if (!setup.client || signingOut.current) throw Error("账号服务暂时不可用");
     signingOut.current = true;
@@ -306,5 +347,5 @@ export function DataGate({ children }: { children: (access: DataAccess) => React
     {error && <button onClick={() => window.location.reload()}>重新打开</button>}</main>;
   return <>{authNotice && <p role="alert">{authNotice}</p>}{setup.error && <p role="alert">{setup.error}</p>}{children({ ...selected, syncEnabled: cloudSyncEnabled, sync, changed,
     subscribe,
-    synchronize, signOut, connect })}</>;
+    synchronize, signOut, connect, details, conflict, resolveConflict })}</>;
 }

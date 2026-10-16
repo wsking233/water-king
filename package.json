@@ -1,6 +1,6 @@
 {
   "name": "water-king",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "test:email-browser": "node scripts/browser-email.mjs"
+    "test:email-browser": "node scripts/browser-email.mjs",
+    "release:check": "node scripts/check-release.mjs",
+    "version:patch": "npm version patch --no-git-tag-version"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",

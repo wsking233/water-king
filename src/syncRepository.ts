@@ -1,5 +1,5 @@
 import { readStore, type Store } from "./records.ts";
-import { parsePage, validCursor, type ChangePage, type RemoteChange } from "./syncProtocol.ts";
+import { parseChange, parsePage, validCursor, type ChangePage, type RemoteChange } from "./syncProtocol.ts";
 
 export function stateVersion(state: Store) {
   return JSON.stringify({ entries: state.entries.map(recordValue),
@@ -251,6 +251,65 @@ export class SyncRepository {
       await done.catch(() => {});
       throw error;
     }
+    await done;
+  }
+
+  async lastSyncedAt(owner: string): Promise<string | null> {
+    const tx = this.db.transaction("metadata", "readonly");
+    const done = completion(tx);
+    const value = await request(tx.objectStore("metadata").get(`synced:${owner}`));
+    await done;
+    return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
+  }
+
+  async markSynced(owner: string): Promise<string | null> {
+    const tx = this.db.transaction(["outbox", "metadata"], "readwrite");
+    const done = completion(tx);
+    const count = await request(tx.objectStore("outbox").index("owner").count(owner));
+    const stamp = count ? null : new Date().toISOString();
+    if (stamp) tx.objectStore("metadata").put(stamp, `synced:${owner}`);
+    await done; return stamp;
+  }
+
+  /** Resolve exactly the reviewed entity; coalesce its queued edits into one CAS. */
+  async resolveConflict(owner: string, mutationId: string, remoteInput: RemoteChange | null,
+    choice: "local" | "remote", expectedVersion: string) {
+    const remote = remoteInput === null ? null : parseChange(remoteInput);
+    const tx = this.db.transaction(["snapshots", "outbox"], "readwrite");
+    const done = completion(tx);
+    try {
+      const snapshots = tx.objectStore("snapshots"), queue = tx.objectStore("outbox");
+      const snapshot = await request(snapshots.get(owner)) as Snapshot | undefined;
+      const pending = await request(queue.index("owner").getAll(owner)) as Mutation[];
+      const first = pending[0];
+      if (!snapshot || stateVersion(snapshot.state) !== expectedVersion || first?.mutationId !== mutationId)
+        throw Error("记录或队列已变化，请重新查看冲突内容。");
+      if (remote && (remote.entity !== first.entity || remote.entityId !== first.entityId)) throw Error("冲突归属不匹配");
+      if (first.entity === "cup" && first.entityId !== this.deviceId) throw Error("不能修改另一设备的杯子");
+      if (choice === "remote" && !remote && first.entity !== "record") throw Error("云端没有此设置，请保留本机内容。");
+      const key = `${first.entity}:${first.entityId}`;
+      const revisions = { ...snapshot.revisions };
+      const revision = remote?.revision ?? 0;
+      let state = snapshot.state;
+      for (const item of pending)
+        if (item.entity === first.entity && item.entityId === first.entityId) queue.delete([owner, item.sequence]);
+      if (choice === "local") {
+        const local = entities(state, this.deviceId).get(key)?.value ?? null;
+        queue.add({ ...first, mutationId: crypto.randomUUID(), expectedRevision: revision, value: local });
+        revisions[key] = revision + 1;
+      } else {
+        const value = remote?.value ?? null;
+        if (first.entity === "record") {
+          const entries = state.entries.filter(item => item.id !== first.entityId);
+          if (value !== null) entries.push(value as Store["entries"][number]);
+          state = { ...state, entries: entries.sort((a,b) => Date.parse(b.at)-Date.parse(a.at)) };
+        } else if (first.entity === "settings") state = { ...state, goal: (value as {goal:number|null}).goal };
+        else state = { ...state, cup: value as Store["cup"] };
+        revisions[key] = revision;
+      }
+      state = readStore(JSON.stringify(state), null);
+      snapshots.put({ ...snapshot, state, revisions });
+    } catch (error) { tx.abort(); await done.catch(() => {}); throw error; }
     await done;
   }
 

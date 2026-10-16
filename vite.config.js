@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
+const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
 function buildId() {
   if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
   try {
@@ -23,6 +24,7 @@ function offlinePlugin() {
     },
     closeBundle() {
       const root = resolve(config.root, config.build.outDir);
+      writeFileSync(resolve(root, "version.json"), JSON.stringify({ version: appVersion, build: JSON.parse(config.define.__APP_BUILD__) }));
       const files = readdirSync(root, { recursive: true }).filter(
         (name) =>
           name === "index.html" ||
@@ -58,6 +60,7 @@ self.addEventListener('fetch',event=>{
 export default defineConfig(({ command }) => ({
   build: { rollupOptions: { output: { manualChunks: { supabase: ["@supabase/supabase-js"] } } } },
   define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
     __APP_BUILD__: JSON.stringify(command === "serve" ? "本地开发" : buildId()),
   },
   plugins: [offlinePlugin()],

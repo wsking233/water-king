@@ -1,9 +1,10 @@
 import { chromium } from 'playwright-core';
 import { build, preview } from 'vite';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
+const appVersion=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 const outDir = await mkdtemp(join(tmpdir(), 'water-king-browser-'));
 const defines = {
   'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://test.supabase.co'),
@@ -113,6 +114,26 @@ try {
   assert.equal(first.queued.length,0);
   assert.equal(await page.evaluate(()=>localStorage.getItem('water-king.state.v2')),original);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await other.close();
+  if(process.env.SCREENSHOT_PATH) await page.screenshot({path:process.env.SCREENSHOT_PATH,fullPage:true});
+  // Both explicit conflict choices must finish without discarding unrelated data.
+  for(const choice of ['local','remote']) {
+    const settings=rows.get('settings:settings');
+    rows.set('settings:settings',{...settings,revision:settings.revision+1,cursor:String(++head),value:{goal:1500}});
+    await page.getByRole('button',{name:'每日饮水目标',exact:false}).click();
+    const desired=choice==='local'?2000:2500;
+    await page.getByRole('dialog').getByRole('button',{name:`${desired} ml`,exact:true}).click();
+    await page.getByRole('dialog').getByRole('button',{name:'保存目标',exact:true}).click();
+    await page.getByRole('button',{name:'处理同步冲突',exact:true}).click();
+    const conflict=page.getByRole('dialog');
+    await conflict.getByText(`每日目标 ${desired} ml`,{exact:true}).waitFor();
+    await conflict.getByText('每日目标 1500 ml',{exact:true}).waitFor();
+    await conflict.getByRole('button',{name:choice==='local'?'保留本机内容':'使用云端内容',exact:true}).click();
+    await page.getByText('记录已同步',{exact:true}).waitFor();
+    assert.equal((await snapshot(page)).state.state.goal,choice==='local'?2000:1500);
+    assert.equal(rows.get('settings:settings').value.goal,choice==='local'?2000:1500);
+    assert.equal((await snapshot(page)).queued.length,0);
+  }
   // A cloud-side deletion is pulled as a tombstone and must not be recreated locally.
   const remote=rows.get('record:cloud-existing');
   rows.set('record:cloud-existing',{...remote,revision:remote.revision+1,cursor:String(++head),value:null});
@@ -120,7 +141,6 @@ try {
   await page.getByText('记录已同步',{exact:true}).waitFor();
   assert.equal((await snapshot(page)).state.state.entries.some(e=>e.id==='cloud-existing'),false);
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  await other.close();
   await context.setOffline(true);
   await page.reload();
   await page.getByText('私人记录',{exact:true}).waitFor();
@@ -143,7 +163,12 @@ try {
   await page.getByText('私人记录',{exact:true}).waitFor();
   assert.equal((await snapshot(page)).state.state.entries.length,207);
   await page.getByRole('button',{name:'我的',exact:true}).click();
+  await page.getByRole('button',{name:`水王 v${appVersion}`,exact:false}).click();
+  await page.getByText('版本诊断信息',{exact:true}).click();
   await page.getByText(/browser-update/).waitFor();
+  await page.getByRole('button',{name:'检查更新',exact:true}).click();
+  await page.getByRole('status').filter({hasText:`当前已是最新版本 v${appVersion}`}).waitFor();
+  await page.getByRole('dialog').getByRole('button',{name:'关闭',exact:true}).click();
   const freshAuth = await page.evaluate(()=>localStorage.getItem('sb-test-auth-token'));
   await context.setOffline(true);
   const expired = { ...session, expires_at: Math.floor(Date.now()/1000)-3600,
@@ -186,7 +211,7 @@ try {
   assert.deepEqual({writes,pulls},before);
   await closedContext.close();
   assert.deepEqual(errors,[]);
-  console.log('PASS: explicit consent, cancel without upload, initial merge with more than 200 mutations auto-continued, cloud deletion tombstones, cloud goal, independent cup, original data preserved, second-tab switch, offline reload and queued recording, reconnect upload, active update preserves data, expired Auth does not block offline records, explicit test-only disabled build retains records without RPC, 320px layout.');
+  console.log('PASS: explicit consent, cancel without upload, initial merge with more than 200 mutations auto-continued, both conflict choices, release version and update check, cloud deletion tombstones, cloud goal, independent cup, original data preserved, second-tab switch, offline reload and queued recording, reconnect upload, active update preserves data, expired Auth does not block offline records, explicit test-only disabled build retains records without RPC, 320px layout.');
 } finally {
   await browser.close();
   server.httpServer.closeAllConnections();

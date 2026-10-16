@@ -13,11 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - run: npm run release:check
       - run: npm test
       - run: npm run test:lifecycle
       - run: git diff --exit-code -- supabase/lifecycle-upgrade.sql
