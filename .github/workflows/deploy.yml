@@ -34,6 +34,10 @@ jobs:
         run: npm run test:leaderboard-browser
         env:
           CHROME_PATH: /usr/bin/google-chrome
+      - name: Goal history browser and SQL integration
+        run: npm run test:goal-browser
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
       - name: Mobile email account regression
         run: npm run test:email-browser
         env:

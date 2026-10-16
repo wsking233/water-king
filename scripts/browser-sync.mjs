@@ -56,8 +56,10 @@ const handleRequest = async route => {
     const changes = [...rows.values()].filter(row=>BigInt(row.cursor)>BigInt(body.p_after)).sort((a,b)=>Number(BigInt(a.cursor)-BigInt(b.cursor)));
     return json({changes,cursor:String(head),hasMore:false});
   }
-  if (url.pathname.endsWith('/sync_apply')) {
+  if (url.pathname.endsWith('/goal_ticket')) return json({ticket:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',revision:rows.get('settings:settings')?.revision??0,day:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})});
+  if (url.pathname.endsWith('/sync_apply') || url.pathname.endsWith('/sync_goal_apply')) {
     const body = req.postDataJSON(); writes++;
+    if(url.pathname.endsWith('/sync_goal_apply')) { body.p_entity='settings';body.p_entity_id='settings'; }
     if (receipts.has(body.p_mutation_id)) return json(receipts.get(body.p_mutation_id));
     const key = `${body.p_entity}:${body.p_entity_id}`;
     const old = rows.get(key);

@@ -11,7 +11,7 @@ const metrics = [
 ] as const;
 type Metric = typeof metrics[number]["id"];
 type Row = { nickname: string; score: number; rank: number; empty: boolean; incomplete: boolean };
-type Page = { rows: Row[]; mine: Row | null; total: number; hasMore: boolean; participating: boolean | null; snapshot: string; stale: boolean; updatedAt: string; day: string; goalHistoryAvailable: boolean };
+type Page = { rows: Row[]; mine: Row | null; total: number; hasMore: boolean; participating: boolean | null; snapshot: string; stale: boolean; updatedAt: string; day: string; goalHistoryAvailable: boolean; goalCoverageStart?: string | null };
 export function Leaderboard({ owner, openAccount }: { owner: string; openAccount: () => void }) {
   const [metric, setMetric] = useState<Metric>("streak");
   const [page, setPage] = useState<Page | null>(null);
@@ -75,7 +75,8 @@ export function Leaderboard({ owner, openAccount }: { owner: string; openAccount
     <div className="leaderboard-toolbar"><span>{page ? `${page.total} 位水友 · 北京时间 ${page.day}` : "全站榜单 · 北京时间"}</span><button onClick={() => void load()} disabled={busy} aria-label="刷新排行榜"><RefreshCw size={18} className={busy ? "refresh-spinning" : ""} />刷新</button></div>
     {(offline || (error && page)) && <p className="leaderboard-cache" role="status">当前显示本页缓存，成绩可能已变化。</p>}
     {page && <p className="leaderboard-time">{offline ? "缓存时间" : "截至服务器最近同步"}：{new Date(page.updatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })}</p>}
-    {metric === "goals" && <p className="leaderboard-cache">历史目标统计可能不完整。旧数据没有每日目标证据，不会用当前目标追溯计分。{page && !page.goalHistoryAvailable && "目前尚无可靠目标历史覆盖，显示 0 天。"}</p>}
+    {metric === "goals" && <p className="leaderboard-cache">历史目标统计可能不完整。旧数据没有每日目标证据，不会用当前目标追溯计分。{page && !page.goalHistoryAvailable && "目前尚无可靠目标历史覆盖。在线保存目标后可开始建立覆盖。"}</p>}
+    {metric === "goals" && page?.goalCoverageStart && <p className="settings-note">你的目标历史起日：{page.goalCoverageStart}。此前及无法确认的日期不计分。</p>}
     {owner === "local" && page?.participating == null ? <button className="leaderboard-mine" onClick={openAccount}><Trophy /><span><strong>我的名次</strong><small>接入云同步后参与，查看「我的」</small></span></button> : <section className="leaderboard-mine" aria-label="我的排名"><Trophy /><span><strong>我的名次</strong><small>{!page ? "等待加载" : page.mine ? `第 ${page.mine.rank} 名 · ${page.mine.score.toLocaleString()} ${selected.unit}${page.mine.empty ? " · 暂无记录" : ""}` : page.participating === false ? "未参与 · 可在「我的」开启" : "暂未取得排名"}</small></span></section>}
     {error && <div className="account-error" role="alert">{error}<button className="secondary" onClick={() => void load()} disabled={busy}>重试加载</button></div>}
     <div id="leaderboard-results" role="tabpanel" aria-labelledby={`lb-${metric}`} aria-busy={busy}>

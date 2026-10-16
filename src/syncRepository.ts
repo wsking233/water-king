@@ -10,6 +10,7 @@ function recordValue(record: Store["entries"][number]) {
     ...(record.cupId === undefined ? {} : { cupId: record.cupId }) };
 }
 
+export type GoalEvidence = { ticket: string; eventId: string };
 export type Mutation = {
   owner: string;
   sequence: number;
@@ -18,6 +19,7 @@ export type Mutation = {
   entityId: string;
   expectedRevision: number;
   value: unknown | null;
+  goalEvidence?: GoalEvidence;
 };
 type Snapshot = {
   owner: string;
@@ -106,7 +108,7 @@ export class SyncRepository {
   }
 
   /** Caller must have shown import scope and obtained consent before first account save. */
-  async save(owner: string, state: Store, expectedVersion?: string): Promise<void> {
+  async save(owner: string, state: Store, expectedVersion?: string, goalEvidence?: GoalEvidence): Promise<void> {
     if (!owner) throw Error("缺少数据归属");
     const validated = readStore(JSON.stringify(state), null);
     const tx = this.db.transaction(["snapshots", "outbox"], "readwrite");
@@ -124,7 +126,7 @@ export class SyncRepository {
       for (const key of new Set([...before.keys(), ...after.keys()])) {
         const oldValue = before.get(key);
         const next = after.get(key);
-        if (JSON.stringify(oldValue?.value) === JSON.stringify(next?.value)) continue;
+        if (JSON.stringify(oldValue?.value) === JSON.stringify(next?.value) && !(goalEvidence && next?.entity === "settings")) continue;
         const entity = next ?? oldValue!;
         // Local-only namespace never creates an upload queue.
         if (owner !== "local") {
@@ -133,6 +135,7 @@ export class SyncRepository {
             owner, sequence: ++sequence, mutationId: crypto.randomUUID(),
             entity: entity.entity, entityId: entity.entityId,
             expectedRevision: revision, value: next?.value ?? null,
+            ...(entity.entity === "settings" && goalEvidence ? { goalEvidence } : {}),
           };
           queue.add(mutation);
           revisions[key] = revision + 1;
@@ -295,7 +298,8 @@ export class SyncRepository {
         if (item.entity === first.entity && item.entityId === first.entityId) queue.delete([owner, item.sequence]);
       if (choice === "local") {
         const local = entities(state, this.deviceId).get(key)?.value ?? null;
-        queue.add({ ...first, mutationId: crypto.randomUUID(), expectedRevision: revision, value: local });
+        const { goalEvidence: _oldEvidence, ...unproven } = first;
+        queue.add({ ...unproven, mutationId: crypto.randomUUID(), expectedRevision: revision, value: local });
         revisions[key] = revision + 1;
       } else {
         const value = remote?.value ?? null;

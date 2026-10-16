@@ -54,6 +54,8 @@ import { AboutApp } from "./AboutApp";
 import { appVersion } from "./build";
 import { EmailAuthProvider } from "./EmailAuthSheet";
 import { Leaderboard, LeaderboardPrivacy } from "./Leaderboard";
+import { loadGoalTicket, type GoalTicket } from "./cloud/goalHistory";
+import type { GoalEvidence } from "./syncRepository";
 import { AccountPanel } from "./AccountPanel";
 import { DataGate, type DataAccess } from "./DataGate";
 const labels = { water: "喝水", small: "嘘嘘" };
@@ -163,6 +165,8 @@ function App({ access }: { access: DataAccess }) {
   );
   const [goalDraft, setGoalDraft] = useState("2000");
   const [goalOff, setGoalOff] = useState(false);
+  const [goalTicket, setGoalTicket] = useState<GoalTicket | null>(null);
+  const [goalTicketLoading, setGoalTicketLoading] = useState(false);
   const [entries, setEntries] = useState(initial.entries),
     [blocked, setBlocked] = useState(Boolean(initial.error)),
     [error, setError] = useState(initial.error);
@@ -228,6 +232,16 @@ function App({ access }: { access: DataAccess }) {
     const timer = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(timer);
   }, [notice]);
+  useEffect(() => {
+    setGoalTicket(null);
+    if (sheet !== "goal" || access.session.owner === "local") return;
+    const controller = new AbortController();
+    setGoalTicketLoading(true);
+    void loadGoalTicket(access.session.owner, controller.signal).then(value => {
+      if (!controller.signal.aborted) setGoalTicket(value);
+    }).catch(() => {}).finally(() => { if (!controller.signal.aborted) setGoalTicketLoading(false); });
+    return () => controller.abort();
+  }, [sheet, access.session.owner]);
   function navigate(next: Tab) {
     setTab(next);
     setSheet(null);
@@ -241,12 +255,13 @@ function App({ access }: { access: DataAccess }) {
     undo?: string,
     nextCup: Cup = cup,
     nextGoal: number | null = goal,
+    goalEvidence?: GoalEvidence,
   ) {
     if (savingRef.current) return false;
     savingRef.current = true; setSaving(true); reloadEpoch.current++;
     let failed = false;
     try {
-      const saved = await access.session.save({ entries: next, cup: nextCup, goal: nextGoal }, versionRef.current);
+      const saved = await access.session.save({ entries: next, cup: nextCup, goal: nextGoal }, versionRef.current, goalEvidence);
       if (!alive.current) return false;
       versionRef.current = saved.version;
       access.changed();
@@ -1041,6 +1056,7 @@ function App({ access }: { access: DataAccess }) {
                     undefined,
                     cup,
                     goalOff ? null : Number(goalDraft),
+                    goalTicket ? { ticket: goalTicket.ticket, eventId: crypto.randomUUID() } : undefined,
                   )
                 )
                   setSheet(null);
@@ -1049,6 +1065,7 @@ function App({ access }: { access: DataAccess }) {
               <p className="sheet-description">
                 按自己的需求设置，保存后用于今天及之后每天。目标只是提醒，不需要勉强完成。
               </p>
+              {access.session.owner !== "local" && <p className="sheet-description" role="status">{goalTicketLoading ? "正在确认服务器日期…" : goalTicket ? `服务器北京日期：${goalTicket.day}。同日成功同步后，从该日开始统计目标完成天数；同日以最后确认的目标为准。若有未同步目标或发生冲突，请同步后再次保存确认。` : "当前没有日期凭证。仍可保存并同步目标；无法确认的历史不计入目标榜，联网后重新保存可恢复当天及之后的覆盖。"}</p>}
               <label className="goal-input">
                 每日目标
                 <input
@@ -1086,7 +1103,7 @@ function App({ access }: { access: DataAccess }) {
                 />
                 不显示目标，轻松记录
               </label>
-              <button className="primary" disabled={blocked || saving}>
+              <button className="primary" disabled={blocked || saving || goalTicketLoading}>
                 保存目标
               </button>
             </form>

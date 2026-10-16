@@ -34,3 +34,22 @@ test("RPC pins the checked identity's token even if the SDK's active session cha
   await assert.rejects(t.apply("b", mutation, new AbortController().signal), /队列账号不匹配/);
   assert.equal(requests.length, 1);
 });
+
+test("settings use the goal RPC and stable proof; record writes retain v1 without proof fields",async()=>{
+  const requests: {url:string;body:Record<string,unknown>}[]=[];
+  const client=createClient<Database>('https://example.supabase.co','sb_publishable_test',{
+    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+    global:{fetch:async(url,options)=>{
+      requests.push({url:String(url),body:JSON.parse(String(options?.body))});
+      return new Response(JSON.stringify({status:'applied',mutationId:'m',revision:1,cursor:'1'}),{headers:{'Content-Type':'application/json'}});
+    }},
+  });
+  client.auth.getSession=async()=>({error:null,data:{session:{user:{id:'a'},access_token:'token-a'} as Session}});
+  const t=createSyncTransport(client);
+  const base={owner:'a',sequence:1,mutationId:'m',entity:'settings' as const,entityId:'settings',expectedRevision:0,value:{goal:1000}};
+  await t.apply('a',{...base,goalEvidence:{ticket:'ticket-a',eventId:'event-a'}},new AbortController().signal);
+  assert.match(requests[0].url,/sync_goal_apply$/);
+  assert.equal(requests[0].body.p_ticket,'ticket-a');assert.equal(requests[0].body.p_event_id,'event-a');
+  await t.apply('a',base,new AbortController().signal);
+  assert.equal(requests[1].body.p_ticket,null);assert.equal(requests[1].body.p_event_id,null);
+});

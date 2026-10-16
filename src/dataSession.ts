@@ -1,6 +1,6 @@
 import { LocalRecordRepository } from "./repository.ts";
 import { KEY, STORE_KEY, newCup, type Store } from "./records.ts";
-import { stateVersion, type SyncRepository } from "./syncRepository.ts";
+import { stateVersion, type GoalEvidence, type SyncRepository } from "./syncRepository.ts";
 
 export type DataSnapshot = { state: Store; version: string; error: string };
 export async function localWriteLock<T>(run: () => Promise<T>): Promise<T> {
@@ -43,7 +43,7 @@ export class DataSession {
     if (!loaded) throw Error("账号本机记录暂时无法读取");
     return { state: loaded.state, version: stateVersion(loaded.state), error: "" };
   }
-  async save(state: Store, expectedVersion: string): Promise<DataSnapshot> {
+  async save(state: Store, expectedVersion: string, goalEvidence?: GoalEvidence): Promise<DataSnapshot> {
     const assertActive = () => { if (!this.valid || !this.authorized()) throw Error("数据账号已变化，请重新打开页面"); };
     assertActive();
     if (this.owner === "local") return localWriteLock(async () => {
@@ -54,7 +54,7 @@ export class DataSession {
       const saved = this.local.save(state);
       return { state: saved, version: localVersion(), error: "" };
     });
-    await this.repository!.save(this.owner, state, expectedVersion);
+    await this.repository!.save(this.owner, state, expectedVersion, goalEvidence);
     return { state, version: stateVersion(state), error: "" };
   }
 }

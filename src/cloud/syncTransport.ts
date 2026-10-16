@@ -26,11 +26,16 @@ export function createSyncTransport(client: SupabaseClient<Database>): SyncTrans
     async apply(owner, mutation, signal) {
       if (mutation.owner !== owner) throw Error("队列账号不匹配");
       const jwt = await token(owner, signal);
-      const { data, error } = await client.rpc("sync_apply", {
+      const request = mutation.entity === "settings" ? client.rpc("sync_goal_apply", {
+        p_mutation_id: mutation.mutationId, p_expected_revision: mutation.expectedRevision,
+        p_value: mutation.value as Json, p_ticket: mutation.goalEvidence?.ticket ?? null,
+        p_event_id: mutation.goalEvidence?.eventId ?? null,
+      }) : client.rpc("sync_apply", {
         p_mutation_id: mutation.mutationId, p_entity: mutation.entity,
         p_entity_id: mutation.entityId, p_expected_revision: mutation.expectedRevision,
         p_value: mutation.value as Json,
-      }).setHeader("Authorization", `Bearer ${jwt}`)
+      });
+      const { data, error } = await request.setHeader("Authorization", `Bearer ${jwt}`)
         .abortSignal(AbortSignal.any([signal, AbortSignal.timeout(15000)]));
       if (error) throw error;
       return data;

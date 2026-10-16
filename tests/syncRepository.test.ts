@@ -160,3 +160,26 @@ test("bad pages, stale cursors and impossible cup water roll back data and curso
   await assert.rejects(r.applyPage("a", { cursor: "0", hasMore: true, changes: [] }, "0"));
   r.close();
 });
+
+test("goal date evidence persists with the exact mutation; same-value confirmation queues; conflict choice discards old evidence", async () => {
+  const { factory, repository: r } = await fixture();
+  const state = { entries: [], cup: newCup(), goal: 1500 };
+  await r.save('user-a',state);
+  for (const m of await r.pending('user-a')) await r.acknowledge('user-a',m.sequence,m.mutationId,m.expectedRevision+1);
+  const evidence = { ticket:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',eventId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
+  await r.save('user-a',state,undefined,evidence);
+  const [mutation] = await r.pending('user-a');
+  assert.equal((await r.pending('user-a')).length,1);
+  assert.equal(mutation.entity,'settings');
+  assert.deepEqual(mutation.goalEvidence,evidence);
+  r.close();
+  const reopened = await SyncRepository.open(factory);
+  assert.deepEqual((await reopened.pending('user-a'))[0],mutation);
+  const { stateVersion } = await import('../src/syncRepository.ts');
+  await reopened.resolveConflict('user-a',mutation.mutationId,{entity:'settings',entityId:'settings',revision:5,cursor:'5',value:{goal:2000}},'local',stateVersion(state));
+  const [resolved] = await reopened.pending('user-a');
+  assert.equal(resolved.goalEvidence,undefined);
+  assert.equal(resolved.expectedRevision,5);
+  assert.notEqual(resolved.mutationId,mutation.mutationId);
+  reopened.close();
+});

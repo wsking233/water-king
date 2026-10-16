@@ -53,6 +53,8 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      goal_ticket: { Args: { [_ in never]: never }; Returns: Json };
+      sync_goal_apply: { Args: { p_mutation_id: string; p_expected_revision: number; p_value: Json; p_ticket: string | null; p_event_id: string | null }; Returns: Json };
       leaderboard_page: { Args: { p_metric: string; p_offset: number; p_snapshot: string | null }; Returns: Json };
       leaderboard_participation: { Args: { p_enabled: boolean }; Returns: boolean };
       account_status: { Args: { [_ in never]: never }; Returns: Json };
